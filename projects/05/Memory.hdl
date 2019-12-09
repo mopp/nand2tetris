@@ -5,20 +5,20 @@
 
 /**
  * The complete address space of the Hack computer's memory,
- * including RAM and memory-mapped I/O. 
+ * including RAM and memory-mapped I/O.
  * The chip facilitates read and write operations, as follows:
  *     Read:  out(t) = Memory[address(t)](t)
  *     Write: if load(t-1) then Memory[address(t-1)](t) = in(t-1)
- * In words: the chip always outputs the value stored at the memory 
- * location specified by address. If load==1, the in value is loaded 
- * into the memory location specified by address. This value becomes 
+ * In words: the chip always outputs the value stored at the memory
+ * location specified by address. If load==1, the in value is loaded
+ * into the memory location specified by address. This value becomes
  * available through the out output from the next time step onward.
  * Address space rules:
- * Only the upper 16K+8K+1 words of the Memory chip are used. 
- * Access to address>0x6000 is invalid. Access to any address in 
- * the range 0x4000-0x5FFF results in accessing the screen memory 
- * map. Access to address 0x6000 results in accessing the keyboard 
- * memory map. The behavior in these addresses is described in the 
+ * Only the upper 16K+8K+1 words of the Memory chip are used.
+ * Access to address>0x6000 is invalid. Access to any address in
+ * the range 0x4000-0x5FFF results in accessing the screen memory
+ * map. Access to address 0x6000 results in accessing the keyboard
+ * memory map. The behavior in these addresses is described in the
  * Screen and Keyboard chip specifications given in the book.
  */
 
@@ -27,5 +27,16 @@ CHIP Memory {
     OUT out[16];
 
     PARTS:
-    // Put your code here:
+    Not(in = address[14], out = notscreen);
+    And(a = load, b = notscreen, out = writememory);
+    RAM16K(in = in, load = writememory, address = address[0..13], out = o0);
+
+    And(a = load, b = address[14], out = writescreen);
+    Screen(in = in, load = writescreen, address = address[0..12], out = o1);
+
+    Mux16(a = o0, b = o1, sel = address[14], out = t1);
+
+    Keyboard(out = keyout);
+    And(a = address[13], b = address[14], out = keyboard);
+    Mux16(a = t1, b = keyout, sel = keyboard, out = out);
 }
