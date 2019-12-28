@@ -48,7 +48,9 @@ impl<'a, T: BufRead + Seek> Parser<'a, T> {
     }
 
     fn advance(&mut self) {
-        debug_assert!(true, self.has_more_commands());
+        if !self.has_more_commands() {
+            panic!("You cannot call advance if has_more_commands returns false");
+        }
 
         self.current_line.clear();
         let num_bytes = self
@@ -68,7 +70,21 @@ impl<'a, T: BufRead + Seek> Parser<'a, T> {
     }
 
     fn symbol(&self) -> String {
-        unimplemented!();
+        match self.command_type() {
+            CommandType::Address => {
+                let s = self.current_line.trim();
+                let end = s.len();
+                s[1..end].to_string()
+            }
+            CommandType::Label => {
+                let s = self.current_line.trim();
+                let end = s.len();
+                s[1..end - 1].to_string()
+            }
+            CommandType::Compute => {
+                panic!("You can call symbol only if the command type is address or label")
+            }
+        }
     }
 
     fn dest(&self) -> String {
@@ -112,5 +128,15 @@ mod tests {
 
         parser.advance();
         assert_eq!(CommandType::Compute, parser.command_type());
+    }
+
+    #[test]
+    fn test_symbol() {
+        let mut cursor = Cursor::new(b"@999\n(LOOP)\nD=A");
+        let mut parser = Parser::new(&mut cursor);
+        assert_eq!("999", parser.symbol());
+
+        parser.advance();
+        assert_eq!("LOOP", parser.symbol());
     }
 }
