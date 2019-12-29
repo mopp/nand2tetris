@@ -106,7 +106,7 @@ mod tests {
     use std::io::Cursor;
 
     #[test]
-    fn test_has_more_commands() {
+    fn has_more_commands_test() {
         let mut cursor = Cursor::new("D=A");
         let parser = Parser::new(&mut cursor);
         assert_eq!(true, parser.has_more_commands());
@@ -118,7 +118,7 @@ mod tests {
     }
 
     #[test]
-    fn test_command_type() {
+    fn command_type_test() {
         let mut cursor = Cursor::new(b"@999\n(LOOP)\nD=A");
         let mut parser = Parser::new(&mut cursor);
         assert_eq!(CommandType::Address, parser.command_type());
@@ -131,7 +131,7 @@ mod tests {
     }
 
     #[test]
-    fn test_symbol() {
+    fn symbol_test() {
         let mut cursor = Cursor::new(b"@999\n(LOOP)\nD=A");
         let mut parser = Parser::new(&mut cursor);
         assert_eq!("999", parser.symbol());
