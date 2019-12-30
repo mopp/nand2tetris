@@ -1,6 +1,5 @@
 use std::io::prelude::*;
 use std::io::BufRead;
-use std::io::SeekFrom;
 
 // trait Parser {
 //     fn has_more_commands(&self) -> bool;
@@ -125,7 +124,11 @@ impl<'a, T: BufRead + Seek> Parser<'a, T> {
         }
 
         if let Some(i) = self.current_line.find(';') {
-            Some(self.current_line[i + 1..self.current_line.len()].trim().to_string())
+            Some(
+                self.current_line[i + 1..self.current_line.len()]
+                    .trim()
+                    .to_string(),
+            )
         } else {
             None
         }
