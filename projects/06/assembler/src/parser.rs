@@ -87,16 +87,48 @@ impl<'a, T: BufRead + Seek> Parser<'a, T> {
         }
     }
 
-    fn dest(&self) -> String {
-        unimplemented!();
+    fn dest(&self) -> Option<String> {
+        if self.command_type() != CommandType::Compute {
+            panic!("You can call dest only if the command type is compute");
+        }
+
+        if let Some(i) = self.current_line.find('=') {
+            Some(self.current_line[0..i].trim().to_string())
+        } else {
+            None
+        }
     }
 
     fn comp(&self) -> String {
-        unimplemented!();
+        if self.command_type() != CommandType::Compute {
+            panic!("You can call dest only if the command type is compute");
+        }
+
+        let i_head = if let Some(i) = self.current_line.find('=') {
+            i + 1
+        } else {
+            0
+        };
+
+        let i_tail = if let Some(i) = self.current_line.find(';') {
+            i
+        } else {
+            self.current_line.len()
+        };
+
+        self.current_line[i_head..i_tail].trim().to_string()
     }
 
-    fn jump(&self) -> String {
-        unimplemented!();
+    fn jump(&self) -> Option<String> {
+        if self.command_type() != CommandType::Compute {
+            panic!("You can call dest only if the command type is compute");
+        }
+
+        if let Some(i) = self.current_line.find(';') {
+            Some(self.current_line[i + 1..self.current_line.len()].trim().to_string())
+        } else {
+            None
+        }
     }
 }
 
@@ -138,5 +170,42 @@ mod tests {
 
         parser.advance();
         assert_eq!("LOOP", parser.symbol());
+    }
+
+    #[test]
+    fn dest_test() {
+        let mut cursor = Cursor::new(b"D=A");
+        let mut parser = Parser::new(&mut cursor);
+        assert_eq!(Some("D".to_string()), parser.dest());
+
+        let mut cursor = Cursor::new(b" AMD =A");
+        let mut parser = Parser::new(&mut cursor);
+        assert_eq!(Some("AMD".to_string()), parser.dest());
+
+        let mut cursor = Cursor::new(b"0;JMP");
+        let mut parser = Parser::new(&mut cursor);
+        assert_eq!(None, parser.dest());
+    }
+
+    #[test]
+    fn comp_test() {
+        let mut cursor = Cursor::new(b"0;JMP");
+        let mut parser = Parser::new(&mut cursor);
+        assert_eq!("0", parser.comp());
+
+        let mut cursor = Cursor::new(b"A = M-1");
+        let mut parser = Parser::new(&mut cursor);
+        assert_eq!("M-1", parser.comp());
+    }
+
+    #[test]
+    fn jump_test() {
+        let mut cursor = Cursor::new(b"0;JMP");
+        let mut parser = Parser::new(&mut cursor);
+        assert_eq!(Some("JMP".to_string()), parser.jump());
+
+        let mut cursor = Cursor::new(b"D ; JEQ ");
+        let mut parser = Parser::new(&mut cursor);
+        assert_eq!(Some("JEQ".to_string()), parser.jump());
     }
 }
