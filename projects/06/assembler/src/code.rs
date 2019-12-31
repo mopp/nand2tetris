@@ -1,15 +1,16 @@
 fn dest(mnemonic: Option<String>) -> String {
     match mnemonic.as_deref() {
-        None => "000".to_string(),
-        Some("M") => "001".to_string(),
-        Some("D") => "010".to_string(),
-        Some("MD") => "011".to_string(),
-        Some("A") => "100".to_string(),
-        Some("AM") => "101".to_string(),
-        Some("AD") => "110".to_string(),
-        Some("AMD") => "111".to_string(),
+        None => "000",
+        Some("M") => "001",
+        Some("D") => "010",
+        Some("MD") => "011",
+        Some("A") => "100",
+        Some("AM") => "101",
+        Some("AD") => "110",
+        Some("AMD") => "111",
         Some(m) => panic!("unexpected mnemonic was given: {:?}", m),
     }
+    .to_string()
 }
 
 fn comp(mnemonic: String) -> String {
