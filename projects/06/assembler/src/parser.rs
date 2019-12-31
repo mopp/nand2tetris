@@ -179,37 +179,37 @@ mod tests {
     #[test]
     fn dest_test() {
         let mut cursor = Cursor::new(b"D=A");
-        let mut parser = Parser::new(&mut cursor);
+        let parser = Parser::new(&mut cursor);
         assert_eq!(Some("D".to_string()), parser.dest());
 
         let mut cursor = Cursor::new(b" AMD =A");
-        let mut parser = Parser::new(&mut cursor);
+        let parser = Parser::new(&mut cursor);
         assert_eq!(Some("AMD".to_string()), parser.dest());
 
         let mut cursor = Cursor::new(b"0;JMP");
-        let mut parser = Parser::new(&mut cursor);
+        let parser = Parser::new(&mut cursor);
         assert_eq!(None, parser.dest());
     }
 
     #[test]
     fn comp_test() {
         let mut cursor = Cursor::new(b"0;JMP");
-        let mut parser = Parser::new(&mut cursor);
+        let parser = Parser::new(&mut cursor);
         assert_eq!("0", parser.comp());
 
         let mut cursor = Cursor::new(b"A = M - 1");
-        let mut parser = Parser::new(&mut cursor);
+        let parser = Parser::new(&mut cursor);
         assert_eq!("M-1", parser.comp());
     }
 
     #[test]
     fn jump_test() {
         let mut cursor = Cursor::new(b"0;JMP");
-        let mut parser = Parser::new(&mut cursor);
+        let parser = Parser::new(&mut cursor);
         assert_eq!(Some("JMP".to_string()), parser.jump());
 
         let mut cursor = Cursor::new(b"D ; JEQ ");
-        let mut parser = Parser::new(&mut cursor);
+        let parser = Parser::new(&mut cursor);
         assert_eq!(Some("JEQ".to_string()), parser.jump());
     }
 }
