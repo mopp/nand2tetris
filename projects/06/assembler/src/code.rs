@@ -38,6 +38,21 @@ fn comp(mnemonic: String) -> String {
     .to_string()
 }
 
+fn jump(mnemonic: Option<String>) -> String {
+    match mnemonic.as_deref() {
+        None => "000",
+        Some("JGT") => "001",
+        Some("JEQ") => "010",
+        Some("JGE") => "011",
+        Some("JLT") => "100",
+        Some("JNE") => "101",
+        Some("JLE") => "110",
+        Some("JMP") => "111",
+        Some(m) => panic!("unexpected mnemonic was given: {:?}", m),
+    }
+    .to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
