@@ -1,68 +1,66 @@
-use std::io::prelude::*;
 use std::io::BufRead;
 
-// trait Parser {
-//     fn has_more_commands(&self) -> bool;
-//     fn advance(&self);
-//     fn command_type(&self) -> CommandType;
-//     fn symbol(&self) -> String;
-//     fn dest(&self) -> String;
-//     fn comp(&self) -> String;
-//     fn jump(&self) -> String;
-// }
-
 #[derive(Debug, PartialEq, Eq)]
-enum CommandType {
+pub enum CommandType {
     Address,
     Compute,
     Label,
 }
 
 #[derive(Debug)]
-struct Parser<'a, T: BufRead + Seek> {
+pub struct Parser<'a, T: BufRead> {
     contents: &'a mut T,
-    position: usize,
     current_line: String,
     has_next: bool,
 }
 
-impl<'a, T: BufRead + Seek> Parser<'a, T> {
-    fn new(contents: &'a mut T) -> Parser<'a, T> {
-        let mut current_line = String::with_capacity(128);
+impl<'a, T: BufRead> Parser<'a, T> {
+    pub fn new(contents: &'a mut T) -> Parser<'a, T> {
+        let current_line = String::with_capacity(128);
 
-        let num_bytes = contents
-            .read_line(&mut current_line)
-            .expect("reading won't fail");
-        current_line.retain(|c| !c.is_whitespace());
-
-        Parser {
+        let mut p = Parser {
             contents,
-            position: current_line.len(),
             current_line,
-            has_next: num_bytes != 0,
-        }
+            has_next: true,
+        };
+
+        p.advance();
+
+        p
     }
 
-    fn has_more_commands(&self) -> bool {
+    pub fn has_more_commands(&self) -> bool {
         self.has_next
     }
 
-    fn advance(&mut self) {
+    pub fn advance(&mut self) {
         if !self.has_more_commands() {
             panic!("You cannot call advance if has_more_commands returns false");
         }
 
-        self.current_line.clear();
-        let num_bytes = self
-            .contents
-            .read_line(&mut self.current_line)
-            .expect("reading won't fail");
-        self.current_line.retain(|c| !c.is_whitespace());
+        loop {
+            self.current_line.clear();
+            let num_bytes = self
+                .contents
+                .read_line(&mut self.current_line)
+                .expect("reading won't fail");
 
-        self.has_next = num_bytes != 0;
+            if num_bytes == 0 {
+                // EOF.
+                self.has_next = false;
+                break;
+            }
+
+            // Skip empty lines.
+            self.current_line.retain(|c| !c.is_whitespace());
+            if !self.current_line.is_empty() && self.current_line.as_bytes()[0] != b'/' {
+                self.has_next = true;
+                break;
+            }
+        }
     }
 
-    fn command_type(&self) -> CommandType {
+    pub fn command_type(&self) -> CommandType {
         match self.current_line.as_bytes()[0] {
             b'@' => CommandType::Address,
             b'(' => CommandType::Label,
@@ -70,7 +68,7 @@ impl<'a, T: BufRead + Seek> Parser<'a, T> {
         }
     }
 
-    fn symbol(&self) -> String {
+    pub fn symbol(&self) -> String {
         match self.command_type() {
             CommandType::Address => {
                 let s = self.current_line.as_str();
@@ -88,7 +86,7 @@ impl<'a, T: BufRead + Seek> Parser<'a, T> {
         }
     }
 
-    fn dest(&self) -> Option<String> {
+    pub fn dest(&self) -> Option<String> {
         if self.command_type() != CommandType::Compute {
             panic!("You can call dest only if the command type is compute");
         }
@@ -100,7 +98,7 @@ impl<'a, T: BufRead + Seek> Parser<'a, T> {
         }
     }
 
-    fn comp(&self) -> String {
+    pub fn comp(&self) -> String {
         if self.command_type() != CommandType::Compute {
             panic!("You can call dest only if the command type is compute");
         }
@@ -120,16 +118,13 @@ impl<'a, T: BufRead + Seek> Parser<'a, T> {
         self.current_line[i_head..i_tail].to_string()
     }
 
-    fn jump(&self) -> Option<String> {
+    pub fn jump(&self) -> Option<String> {
         if self.command_type() != CommandType::Compute {
             panic!("You can call dest only if the command type is compute");
         }
 
         if let Some(i) = self.current_line.find(';') {
-            Some(
-                self.current_line[i + 1..self.current_line.len()]
-                    .to_string(),
-            )
+            Some(self.current_line[i + 1..self.current_line.len()].to_string())
         } else {
             None
         }

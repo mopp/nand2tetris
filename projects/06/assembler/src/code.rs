@@ -1,4 +1,4 @@
-fn dest(mnemonic: Option<String>) -> String {
+pub fn dest(mnemonic: Option<String>) -> String {
     match mnemonic.as_deref() {
         None => "000",
         Some("M") => "001",
@@ -13,7 +13,7 @@ fn dest(mnemonic: Option<String>) -> String {
     .to_string()
 }
 
-fn comp(mnemonic: String) -> String {
+pub fn comp(mnemonic: String) -> String {
     match mnemonic.as_str() {
         "0" => "0101010",
         "1" => "0111111",
@@ -48,7 +48,7 @@ fn comp(mnemonic: String) -> String {
     .to_string()
 }
 
-fn jump(mnemonic: Option<String>) -> String {
+pub fn jump(mnemonic: Option<String>) -> String {
     match mnemonic.as_deref() {
         None => "000",
         Some("JGT") => "001",
