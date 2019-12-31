@@ -33,6 +33,7 @@ impl<'a, T: BufRead + Seek> Parser<'a, T> {
         let num_bytes = contents
             .read_line(&mut current_line)
             .expect("reading won't fail");
+        current_line.retain(|c| !c.is_whitespace());
 
         Parser {
             contents,
@@ -56,12 +57,13 @@ impl<'a, T: BufRead + Seek> Parser<'a, T> {
             .contents
             .read_line(&mut self.current_line)
             .expect("reading won't fail");
+        self.current_line.retain(|c| !c.is_whitespace());
 
         self.has_next = num_bytes != 0;
     }
 
     fn command_type(&self) -> CommandType {
-        match self.current_line.trim().as_bytes()[0] {
+        match self.current_line.as_bytes()[0] {
             b'@' => CommandType::Address,
             b'(' => CommandType::Label,
             _ => CommandType::Compute,
@@ -71,12 +73,12 @@ impl<'a, T: BufRead + Seek> Parser<'a, T> {
     fn symbol(&self) -> String {
         match self.command_type() {
             CommandType::Address => {
-                let s = self.current_line.trim();
+                let s = self.current_line.as_str();
                 let end = s.len();
                 s[1..end].to_string()
             }
             CommandType::Label => {
-                let s = self.current_line.trim();
+                let s = self.current_line.as_str();
                 let end = s.len();
                 s[1..end - 1].to_string()
             }
@@ -92,7 +94,7 @@ impl<'a, T: BufRead + Seek> Parser<'a, T> {
         }
 
         if let Some(i) = self.current_line.find('=') {
-            Some(self.current_line[0..i].trim().to_string())
+            Some(self.current_line[0..i].to_string())
         } else {
             None
         }
@@ -115,7 +117,7 @@ impl<'a, T: BufRead + Seek> Parser<'a, T> {
             self.current_line.len()
         };
 
-        self.current_line[i_head..i_tail].trim().to_string()
+        self.current_line[i_head..i_tail].to_string()
     }
 
     fn jump(&self) -> Option<String> {
@@ -126,7 +128,6 @@ impl<'a, T: BufRead + Seek> Parser<'a, T> {
         if let Some(i) = self.current_line.find(';') {
             Some(
                 self.current_line[i + 1..self.current_line.len()]
-                    .trim()
                     .to_string(),
             )
         } else {
@@ -196,7 +197,7 @@ mod tests {
         let mut parser = Parser::new(&mut cursor);
         assert_eq!("0", parser.comp());
 
-        let mut cursor = Cursor::new(b"A = M-1");
+        let mut cursor = Cursor::new(b"A = M - 1");
         let mut parser = Parser::new(&mut cursor);
         assert_eq!("M-1", parser.comp());
     }
