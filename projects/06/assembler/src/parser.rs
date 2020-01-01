@@ -16,7 +16,7 @@ pub struct Parser<'a, T: BufRead> {
 
 impl<'a, T: BufRead> Parser<'a, T> {
     pub fn new(contents: &'a mut T) -> Parser<'a, T> {
-        let current_line = String::with_capacity(128);
+        let current_line = String::new();
 
         let mut p = Parser {
             contents,
@@ -53,7 +53,13 @@ impl<'a, T: BufRead> Parser<'a, T> {
 
             // Skip empty lines.
             self.current_line.retain(|c| !c.is_whitespace());
-            if !self.current_line.is_empty() && self.current_line.as_bytes()[0] != b'/' {
+            match self.current_line.find("//") {
+                Some(0) => continue,
+                Some(i) => self.current_line.truncate(i),
+                None => {}
+            }
+
+            if !self.current_line.is_empty() {
                 self.has_next = true;
                 break;
             }
