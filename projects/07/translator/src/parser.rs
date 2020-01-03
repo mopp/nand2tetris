@@ -59,7 +59,7 @@ impl<'a, T: BufRead> Parser<'a, T> {
             }
 
             // Remove newline.
-            buf.retain(|c| c != '\n');
+            buf.retain(|c| c != '\n' && c != '\r');
 
             // Remove comment.
             match buf.find("//") {
@@ -96,7 +96,7 @@ impl<'a, T: BufRead> Parser<'a, T> {
             "function" => CommandType::Function,
             "return" => CommandType::Return,
             "call" => CommandType::Call,
-            command => panic!("Invalid command: {}", command),
+            command => panic!("Invalid command: [{}]", command),
         }
     }
 
