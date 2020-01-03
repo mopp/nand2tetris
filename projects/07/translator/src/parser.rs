@@ -201,10 +201,10 @@ mod tests {
         let mut cursor = Cursor::new(SAMPLE_VM_CODE1);
         let mut parser = Parser::new(&mut cursor).unwrap();
 
-        assert_eq!(3030, parser.arg2().unwrap());
+        assert_eq!(3030, parser.arg2());
         parser.advance();
-        assert_eq!(0, parser.arg2().unwrap());
+        assert_eq!(0, parser.arg2());
         parser.advance();
-        assert_eq!(3040, parser.arg2().unwrap());
+        assert_eq!(3040, parser.arg2());
     }
 }
