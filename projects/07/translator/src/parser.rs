@@ -113,8 +113,10 @@ impl<'a, T: BufRead> Parser<'a, T> {
         let command = self.current_line.split_whitespace().collect::<Vec<_>>();
         match self.command_type() {
             CommandType::Push | CommandType::Pop | CommandType::Function | CommandType::Call => {
-                command[2].parse::<u16>().expect("The 2nd argument cannot be parse")
-            },
+                command[2]
+                    .parse::<u16>()
+                    .expect("The 2nd argument cannot be parse")
+            }
             _ => panic!(
                 "You can call arg2 only when the command type is push, pop, function, or call"
             ),

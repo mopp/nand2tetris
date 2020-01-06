@@ -33,18 +33,21 @@ fn translate<R: BufRead + Seek, W: Write>(
 
     writer.set_filename(path.file_name().unwrap().to_str().unwrap());
     let mut parser = Parser::new(src)?;
-    while parser.has_more_commands() {
+    loop {
         match parser.command_type() {
             CommandType::Push => {
                 writer.write_push_pop("push", parser.arg1().as_str(), parser.arg2())
             }
-            CommandType::Pop => {
-                writer.write_push_pop("pop", parser.arg1().as_str(), parser.arg2())
-            }
+            CommandType::Pop => writer.write_push_pop("pop", parser.arg1().as_str(), parser.arg2()),
+            CommandType::Arithmetic => writer.write_arithmetic(parser.arg1().as_str()),
             _ => unimplemented!(""),
-        }
+        }?;
 
-        parser.advance();
+        if parser.has_more_commands() {
+            parser.advance();
+        } else {
+            break;
+        }
     }
 
     Ok(())
