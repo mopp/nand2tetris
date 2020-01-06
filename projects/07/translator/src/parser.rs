@@ -1,11 +1,32 @@
 use std::io::BufRead;
-use std::io::{Error, ErrorKind};
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum CommandType {
-    Arithmetic,
-    Push,
-    Pop,
+pub enum Segment {
+    Argument,
+    Local,
+    Static,
+    Constant,
+    This,
+    That,
+    Pointer,
+    Temp,
+}
+
+pub type Index = u16;
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Command {
+    Add,
+    Sub,
+    Neg,
+    Eq,
+    Gt,
+    Lt,
+    And,
+    Or,
+    Not,
+    Push(Segment, Index),
+    Pop(Segment, Index),
     Label,
     Goto,
     If,
@@ -17,110 +38,96 @@ pub enum CommandType {
 #[derive(Debug)]
 pub struct Parser<'a, T: BufRead> {
     contents: &'a mut T,
-    current_line: String,
-    next_line: Option<String>,
+    buf: String,
 }
 
 impl<'a, T: BufRead> Parser<'a, T> {
-    pub fn new(contents: &'a mut T) -> Result<Self, Error> {
-        let current_line =
-            Self::read_line(contents).ok_or_else(|| Error::new(ErrorKind::NotFound, "No input"))?;
-        let next_line = Self::read_line(contents);
-
-        Ok(Self {
+    pub fn new(contents: &'a mut T) -> Self {
+        Self {
             contents,
-            current_line,
-            next_line,
-        })
-    }
-
-    pub fn has_more_commands(&self) -> bool {
-        self.next_line.is_some()
-    }
-
-    pub fn advance(&mut self) {
-        if !self.has_more_commands() {
-            panic!("You cannot call advance if has_more_commands returns false");
+            buf: String::with_capacity(512),
         }
-
-        self.current_line = self.next_line.take().unwrap();
-        self.next_line = Parser::read_line(self.contents);
     }
 
-    fn read_line<'b>(contents: &'b mut T) -> Option<String> {
-        let mut buf = String::new();
+    fn parse_segment<'b>(segment: &'b str) -> Segment {
+        match segment {
+            "argument" => Segment::Argument,
+            "local" => Segment::Local,
+            "static" => Segment::Static,
+            "constant" => Segment::Constant,
+            "this" => Segment::This,
+            "that" => Segment::That,
+            "pointer" => Segment::Pointer,
+            "temp" => Segment::Temp,
+            _ => panic!("Invalid segment: [{}]", segment),
+        }
+    }
+}
 
+impl<'a, T: BufRead> Iterator for Parser<'a, T> {
+    type Item = Command;
+
+    fn next(&mut self) -> Option<Self::Item> {
         loop {
-            buf.clear();
+            self.buf.clear();
 
-            if contents.read_line(&mut buf).expect("reading won't fail") == 0 {
+            if self
+                .contents
+                .read_line(&mut self.buf)
+                .expect("reading won't fail")
+                == 0
+            {
                 // EOF.
                 return None;
             }
 
             // Remove newline.
-            buf.retain(|c| c != '\n' && c != '\r');
+            self.buf.retain(|c| c != '\n' && c != '\r');
 
             // Remove comment.
-            match buf.find("//") {
+            match self.buf.find("//") {
                 Some(0) => continue,
-                Some(i) => buf.truncate(i),
+                Some(i) => self.buf.truncate(i),
                 None => {}
             }
 
-            if !buf.is_empty() {
+            if !self.buf.is_empty() {
                 break;
             }
         }
 
-        Some(buf)
-    }
+        let command = self.buf.split_whitespace().collect::<Vec<&str>>();
 
-    pub fn command_type(&self) -> CommandType {
-        let command = if let Some(i) = self.current_line.find(' ') {
-            &self.current_line[0..i]
-        } else {
-            // Arithmetic command has no arguments.
-            self.current_line.as_str()
-        };
-
-        match command {
-            "add" | "sub" | "neg" | "eq" | "gt" | "lt" | "and" | "or" | "not" => {
-                CommandType::Arithmetic
-            }
-            "push" => CommandType::Push,
-            "pop" => CommandType::Pop,
-            "label" => CommandType::Label,
-            "goto" => CommandType::Goto,
-            "if-goto" => CommandType::If,
-            "function" => CommandType::Function,
-            "return" => CommandType::Return,
-            "call" => CommandType::Call,
-            command => panic!("Invalid command: [{}]", command),
-        }
-    }
-
-    pub fn arg1(&self) -> String {
-        let command = self.current_line.split_whitespace().collect::<Vec<_>>();
-        match self.command_type() {
-            CommandType::Arithmetic => command[0].to_string(),
-            CommandType::Return => panic!("You cannot call arg1 when the command type is return"),
-            _ => command[1].to_string(),
-        }
-    }
-
-    pub fn arg2(&self) -> u16 {
-        let command = self.current_line.split_whitespace().collect::<Vec<_>>();
-        match self.command_type() {
-            CommandType::Push | CommandType::Pop | CommandType::Function | CommandType::Call => {
+        Some(match command[0] {
+            "add" => Command::Add,
+            "sub" => Command::Sub,
+            "neg" => Command::Neg,
+            "eq" => Command::Eq,
+            "gt" => Command::Gt,
+            "lt" => Command::Lt,
+            "and" => Command::And,
+            "or" => Command::Or,
+            "not" => Command::Not,
+            "push" => Command::Push(
+                Parser::<T>::parse_segment(command[1]),
                 command[2]
                     .parse::<u16>()
-                    .expect("The 2nd argument cannot be parse")
-            }
-            _ => panic!(
-                "You can call arg2 only when the command type is push, pop, function, or call"
+                    .expect("The 2nd argument cannot be parse"),
             ),
-        }
+            "pop" => Command::Pop(
+                Parser::<T>::parse_segment(command[1]),
+                command[2]
+                    .parse::<u16>()
+                    .expect("The 2nd argument cannot be parse"),
+            ),
+            "label" => Command::Label,
+            "goto" => Command::Goto,
+            "if-goto" => Command::If,
+            "function" => Command::Function,
+            "return" => Command::Return,
+            "call" => Command::Call,
+            command => panic!("Invalid command: [{}]", command),
+        })
     }
 }
 
@@ -144,69 +151,27 @@ mod tests {
     #[test]
     fn has_more_commands_test() {
         let mut cursor = Cursor::new(SAMPLE_VM_CODE1);
-        let mut parser = Parser::new(&mut cursor).unwrap();
+        let parser = Parser::new(&mut cursor);
 
-        assert_eq!(true, parser.has_more_commands());
-        assert_eq!("push constant 3030", parser.current_line);
-        parser.advance();
-        assert_eq!(true, parser.has_more_commands());
-        assert_eq!("pop pointer 0", parser.current_line);
-        parser.advance();
-        assert_eq!(false, parser.has_more_commands());
-        assert_eq!("push constant 3040", parser.current_line);
-    }
-
-    #[test]
-    fn command_type_test() {
-        let mut cursor = Cursor::new(SAMPLE_VM_CODE1);
-        let mut parser = Parser::new(&mut cursor).unwrap();
-
-        assert_eq!(CommandType::Push, parser.command_type());
-        parser.advance();
-        assert_eq!(CommandType::Pop, parser.command_type());
-        parser.advance();
-        assert_eq!(CommandType::Push, parser.command_type());
+        assert_eq!(
+            vec![
+                Command::Push(Segment::Constant, 3030),
+                Command::Pop(Segment::Pointer, 0),
+                Command::Push(Segment::Constant, 3040)
+            ],
+            parser.collect::<Vec<_>>()
+        );
 
         let mut cursor = Cursor::new(SAMPLE_VM_CODE2);
-        let mut parser = Parser::new(&mut cursor).unwrap();
+        let parser = Parser::new(&mut cursor);
 
-        assert_eq!(CommandType::Arithmetic, parser.command_type());
-        parser.advance();
-        assert_eq!(CommandType::Arithmetic, parser.command_type());
-        parser.advance();
-        assert_eq!(CommandType::Push, parser.command_type());
-    }
-
-    #[test]
-    fn arg1_test() {
-        let mut cursor = Cursor::new(SAMPLE_VM_CODE1);
-        let mut parser = Parser::new(&mut cursor).unwrap();
-
-        assert_eq!("constant", parser.arg1().as_str());
-        parser.advance();
-        assert_eq!("pointer", parser.arg1().as_str());
-        parser.advance();
-        assert_eq!("constant", parser.arg1().as_str());
-
-        let mut cursor = Cursor::new(SAMPLE_VM_CODE2);
-        let mut parser = Parser::new(&mut cursor).unwrap();
-
-        assert_eq!("add", parser.arg1().as_str());
-        parser.advance();
-        assert_eq!("sub", parser.arg1().as_str());
-        parser.advance();
-        assert_eq!("constant", parser.arg1().as_str());
-    }
-
-    #[test]
-    fn arg2_test() {
-        let mut cursor = Cursor::new(SAMPLE_VM_CODE1);
-        let mut parser = Parser::new(&mut cursor).unwrap();
-
-        assert_eq!(3030, parser.arg2());
-        parser.advance();
-        assert_eq!(0, parser.arg2());
-        parser.advance();
-        assert_eq!(3040, parser.arg2());
+        assert_eq!(
+            vec![
+                Command::Add,
+                Command::Sub,
+                Command::Push(Segment::Constant, 3040),
+            ],
+            parser.collect::<Vec<_>>()
+        );
     }
 }

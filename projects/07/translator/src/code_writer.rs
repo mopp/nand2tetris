@@ -1,3 +1,4 @@
+use super::parser::{Command, Segment};
 use std::io::prelude::*;
 use std::io::Result;
 
@@ -18,11 +19,10 @@ impl<'a, W: Write> CodeWriter<'a, W> {
         self.filename = Some(filename);
     }
 
-    pub fn write_arithmetic(&mut self, command: &str) -> Result<()> {
-        // NOTE: make the SP indicate the next available memory.
+    pub fn put(&mut self, command: &Command) -> Result<()> {
+        use Command::*;
         let instructions = match command {
-            "add" => {
-                "// = add =====================\n\
+            Add => "// = add =====================\n\
                  @SP\n\
                  M=M-1  // *SP -= 1\n\
                  A=M    // D = **SP\n\
@@ -31,16 +31,8 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                  A=M-1\n\
                  M=D+M  // *(*SP - 1) += D\n\
                  // ===========================\n"
-            }
-            _ => "",
-        };
-
-        self.target.write_all(instructions.as_bytes())
-    }
-
-    pub fn write_push_pop(&mut self, command: &str, segment: &str, index: u16) -> Result<()> {
-        let instructions = match (command, segment) {
-            ("push", "constant") => format!(
+                .to_string(),
+            Push(Segment::Constant, index) => format!(
                 "// = push constant {:5} =====\n\
                  @{}\n\
                  D=A    // D = {}\n\
@@ -56,6 +48,4 @@ impl<'a, W: Write> CodeWriter<'a, W> {
 
         self.target.write_all(instructions.as_bytes())
     }
-
-    // pub fn close() {}
 }
