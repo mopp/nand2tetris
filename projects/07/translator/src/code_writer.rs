@@ -166,13 +166,96 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                  A=M\n\
                  M=D    // **SP = D\n\
                  @SP\n\
-                 M=M+1  // *SP += 1\n",
+                 M=M+1  // *SP += 1\n\
+                 // ===========================\n",
                 index, index, index
             ),
-
-            _ => unimplemented!("TODO"),
+            Push(Segment::Temp, index) => format!(
+                "// = push temp {:2} =====\n\
+                 @5\n\
+                 D=A\n\
+                 @{}\n\
+                 A=A+D\n\
+                 D=M    // D = temp[{}]\n\
+                 @SP\n\
+                 M=M+1  // *SP += 1\n\
+                 A=M-1\n\
+                 M=D    // *(*SP - 1) = D\n\
+                 // ===========================\n",
+                index, index, index
+            ),
+            Push(Segment::Static, _) => unimplemented!("TODO"),
+            Push(Segment::Pointer, _) => unimplemented!("TODO"),
+            Push(segment, index) => {
+                let register_name = self.segment_to_register(segment);
+                format!(
+                    "// = push {:<8} {:5} =========\n\
+                     @{}\n\
+                     D=M\n\
+                     @{}\n\
+                     A=D+A\n\
+                     D=M    // D = &{}[{}]\n\
+                     @SP\n\
+                     M=M+1  // *SP += 1\n\
+                     A=M-1\n\
+                     M=D    // *(*SP - 1) = D\n\
+                     // ===========================\n",
+                    segment, index, register_name, index, segment, index
+                )
+            }
+            Pop(Segment::Temp, index) => format!(
+                "// = pop temp {:2} ===========\n\
+                 @5\n\
+                 D=A\n\
+                 @{}\n\
+                 D=D+A\n\
+                 @R13\n\
+                 M=D    // R13 = &temp[{}]\n\
+                 @SP\n\
+                 M=M-1  // *SP -= 1\n\
+                 A=M\n\
+                 D=M    // D = **SP\n\
+                 @R13\n\
+                 A=M\n\
+                 M=D    // *R13 = D\n\
+                 // ===========================\n",
+                index, index, index
+            ),
+            Pop(segment, index) => {
+                let register_name = self.segment_to_register(segment);
+                format!(
+                    "// = pop {:<8} {:5} ======\n\
+                     @{}\n\
+                     D=M\n\
+                     @{}\n\
+                     D=D+A\n\
+                     @R13\n\
+                     M=D    // R13 = &{}[{}]\n\
+                     @SP\n\
+                     M=M-1  // *SP -= 1\n\
+                     A=M\n\
+                     D=M    // D = **SP\n\
+                     @R13\n\
+                     A=M\n\
+                     M=D    // *R13 = D\n\
+                     // ===========================\n",
+                    segment, index, register_name, index, segment, index
+                )
+            }
+            cmd => unimplemented!("TODO: {:?}", cmd),
         };
 
         self.target.write_all(instructions.as_bytes())
+    }
+
+    fn segment_to_register(&self, segment: &Segment) -> &'static str {
+        match segment {
+            Segment::Local => "LCL",
+            Segment::Argument => "ARG",
+            Segment::This => "THIS",
+            Segment::That => "THAT",
+            Segment::Temp => panic!("internal error"),
+            _ => unimplemented!("TODO"),
+        }
     }
 }

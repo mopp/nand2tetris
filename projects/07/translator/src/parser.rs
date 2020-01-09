@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io::BufRead;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -10,6 +11,25 @@ pub enum Segment {
     That,
     Pointer,
     Temp,
+}
+
+impl fmt::Display for Segment {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Segment::Argument => "argument",
+                Segment::Local => "local",
+                Segment::Static => "static",
+                Segment::Constant => "constant",
+                Segment::This => "this",
+                Segment::That => "that",
+                Segment::Pointer => "pointer",
+                Segment::Temp => "temp",
+            }
+        )
+    }
 }
 
 pub type Index = u16;
