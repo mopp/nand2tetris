@@ -185,7 +185,24 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                 index, index, index
             ),
             Push(Segment::Static, _) => unimplemented!("TODO"),
-            Push(Segment::Pointer, _) => unimplemented!("TODO"),
+            Push(Segment::Pointer, index) => {
+                let register_name = match index {
+                    0 => "THIS",
+                    1 => "THAT",
+                    _ => panic!("unexpected pointer segment: {}", index),
+                };
+                format!(
+                    "// = push pointer {:2}  =========\n\
+                     @{}
+                     D=M    // D = pointer[{}]\n\
+                     @SP
+                     M=M+1  // *SP += 1\n\
+                     A=M-1\n\
+                     M=D    // **SP = D\n\
+                     // ===========================\n",
+                    index, register_name, index
+                )
+            },
             Push(segment, index) => {
                 let register_name = self.segment_to_register(segment);
                 format!(
@@ -221,6 +238,24 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                  // ===========================\n",
                 index, index, index
             ),
+            Pop(Segment::Pointer, index) => {
+                let register_name = match index {
+                    0 => "THIS",
+                    1 => "THAT",
+                    _ => panic!("unexpected pointer segment: {}", index),
+                };
+                format!(
+                    "// = pop pointer {:2}  =========\n\
+                     @SP\n\
+                     M=M-1  // *SP -= 1\n\
+                     A=M\n\
+                     D=M    // D = **SP\n\
+                     @{}
+                     M=D    // pointer[{}] = D\n\
+                     // ===========================\n",
+                    index, register_name, index
+                )
+            }
             Pop(segment, index) => {
                 let register_name = self.segment_to_register(segment);
                 format!(
