@@ -184,7 +184,6 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                  // ===========================\n",
                 index, index, index
             ),
-            Push(Segment::Static, _) => unimplemented!("TODO"),
             Push(Segment::Pointer, index) => {
                 let register_name = match index {
                     0 => "THIS",
@@ -202,7 +201,20 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                      // ===========================\n",
                     index, register_name, index
                 )
-            },
+            }
+            Push(Segment::Static, index) => format!(
+                "// = push static {}  =========\n\
+                     @{}.{}
+                     D=M
+                     @SP
+                     M=M+1  // *SP += 1\n\
+                     A=M-1\n\
+                     M=D    // **SP = D\n\
+                     // ===========================\n",
+                index,
+                self.filename.expect("no filename"),
+                index
+            ),
             Push(segment, index) => {
                 let register_name = self.segment_to_register(segment);
                 format!(
@@ -256,6 +268,20 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                     index, register_name, index
                 )
             }
+            Pop(Segment::Static, index) => format!(
+                "// = pop static {}  =========\n\
+                     @SP\n\
+                     M=M-1  // *SP -= 1\n\
+                     A=M\n\
+                     D=M    // D = **SP\n\
+                     @{}.{}
+                     M=D    // pointer[{}] = D\n\
+                     // ===========================\n",
+                index,
+                self.filename.expect("no filename"),
+                index,
+                index
+            ),
             Pop(segment, index) => {
                 let register_name = self.segment_to_register(segment);
                 format!(
@@ -277,7 +303,7 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                     segment, index, register_name, index, segment, index
                 )
             }
-            cmd => unimplemented!("TODO: {:?}", cmd),
+            _ => panic!("internal error"),
         };
 
         self.target.write_all(instructions.as_bytes())
@@ -289,8 +315,7 @@ impl<'a, W: Write> CodeWriter<'a, W> {
             Segment::Argument => "ARG",
             Segment::This => "THIS",
             Segment::That => "THAT",
-            Segment::Temp => panic!("internal error"),
-            _ => unimplemented!("TODO"),
+            _ => panic!("internal error"),
         }
     }
 }
