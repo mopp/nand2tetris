@@ -1,4 +1,4 @@
-use super::parser::{Command, Segment};
+use super::parser::{Command, Index, Indirect, MappedMemory, Segment};
 use std::io::prelude::*;
 use std::io::Result;
 
@@ -23,6 +23,7 @@ impl<'a, W: Write> CodeWriter<'a, W> {
 
     pub fn put(&mut self, command: &Command) -> Result<()> {
         use Command::*;
+        use MappedMemory::*;
         let instructions = match command {
             Add => "// = add =====================\n\
                  @SP\n\
@@ -158,65 +159,8 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                     c, c, c, c
                 )
             }
-            Push(Segment::Constant, index) => format!(
-                "// = push constant {:5} =====\n\
-                 @{}\n\
-                 D=A    // D = {}\n\
-                 @SP\n\
-                 A=M\n\
-                 M=D    // **SP = D\n\
-                 @SP\n\
-                 M=M+1  // *SP += 1\n\
-                 // ===========================\n",
-                index, index, index
-            ),
-            Push(Segment::Temp, index) => format!(
-                "// = push temp {:2} =====\n\
-                 @5\n\
-                 D=A\n\
-                 @{}\n\
-                 A=A+D\n\
-                 D=M    // D = temp[{}]\n\
-                 @SP\n\
-                 M=M+1  // *SP += 1\n\
-                 A=M-1\n\
-                 M=D    // *(*SP - 1) = D\n\
-                 // ===========================\n",
-                index, index, index
-            ),
-            Push(Segment::Pointer, index) => {
-                let register_name = match index {
-                    0 => "THIS",
-                    1 => "THAT",
-                    _ => panic!("unexpected pointer segment: {}", index),
-                };
-                format!(
-                    "// = push pointer {:2}  =========\n\
-                     @{}
-                     D=M    // D = pointer[{}]\n\
-                     @SP
-                     M=M+1  // *SP += 1\n\
-                     A=M-1\n\
-                     M=D    // **SP = D\n\
-                     // ===========================\n",
-                    index, register_name, index
-                )
-            }
-            Push(Segment::Static, index) => format!(
-                "// = push static {}  =========\n\
-                     @{}.{}
-                     D=M
-                     @SP
-                     M=M+1  // *SP += 1\n\
-                     A=M-1\n\
-                     M=D    // **SP = D\n\
-                     // ===========================\n",
-                index,
-                self.filename.expect("no filename"),
-                index
-            ),
-            Push(segment, index) => {
-                let register_name = self.segment_to_register(segment);
+            Push(Segment::Indirect(segment), index) => {
+                let register_name = self.get_indirect_register_name(segment);
                 format!(
                     "// = push {:<8} {:5} =========\n\
                      @{}\n\
@@ -232,58 +176,60 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                     segment, index, register_name, index, segment, index
                 )
             }
-            Pop(Segment::Temp, index) => format!(
-                "// = pop temp {:2} ===========\n\
+            Push(Segment::MappedMemory(Temp), index) => format!(
+                "// = push temp {:2} =====\n\
                  @5\n\
                  D=A\n\
                  @{}\n\
-                 D=D+A\n\
-                 @R13\n\
-                 M=D    // R13 = &temp[{}]\n\
+                 A=A+D\n\
+                 D=M    // D = temp[{}]\n\
                  @SP\n\
-                 M=M-1  // *SP -= 1\n\
-                 A=M\n\
-                 D=M    // D = **SP\n\
-                 @R13\n\
-                 A=M\n\
-                 M=D    // *R13 = D\n\
+                 M=M+1  // *SP += 1\n\
+                 A=M-1\n\
+                 M=D    // *(*SP - 1) = D\n\
                  // ===========================\n",
                 index, index, index
             ),
-            Pop(Segment::Pointer, index) => {
-                let register_name = match index {
-                    0 => "THIS",
-                    1 => "THAT",
-                    _ => panic!("unexpected pointer segment: {}", index),
-                };
-                format!(
-                    "// = pop pointer {:2}  =========\n\
-                     @SP\n\
-                     M=M-1  // *SP -= 1\n\
-                     A=M\n\
-                     D=M    // D = **SP\n\
-                     @{}
-                     M=D    // pointer[{}] = D\n\
-                     // ===========================\n",
-                    index, register_name, index
-                )
-            }
-            Pop(Segment::Static, index) => format!(
-                "// = pop static {}  =========\n\
-                     @SP\n\
-                     M=M-1  // *SP -= 1\n\
-                     A=M\n\
-                     D=M    // D = **SP\n\
+            Push(Segment::MappedMemory(Pointer), index) => format!(
+                "// = push pointer {:2}  =========\n\
+                 @{}
+                 D=M    // D = pointer[{}]\n\
+                 @SP
+                 M=M+1  // *SP += 1\n\
+                 A=M-1\n\
+                 M=D    // **SP = D\n\
+                 // ===========================\n",
+                index,
+                self.get_pointer_resigter_name(*index),
+                index
+            ),
+            Push(Segment::Static, index) => format!(
+                "// = push static {}  =========\n\
                      @{}.{}
-                     M=D    // pointer[{}] = D\n\
+                     D=M
+                     @SP
+                     M=M+1  // *SP += 1\n\
+                     A=M-1\n\
+                     M=D    // **SP = D\n\
                      // ===========================\n",
                 index,
                 self.filename.expect("no filename"),
-                index,
                 index
             ),
-            Pop(segment, index) => {
-                let register_name = self.segment_to_register(segment);
+            Push(Segment::Constant, index) => format!(
+                "// = push constant {:5} =====\n\
+                 @{}\n\
+                 D=A    // D = {}\n\
+                 @SP\n\
+                 A=M\n\
+                 M=D    // **SP = D\n\
+                 @SP\n\
+                 M=M+1  // *SP += 1\n\
+                 // ===========================\n",
+                index, index, index
+            ),
+            Pop(Segment::Indirect(segment), index) => {
+                let register_name = self.get_indirect_register_name(segment);
                 format!(
                     "// = pop {:<8} {:5} ======\n\
                      @{}\n\
@@ -303,19 +249,72 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                     segment, index, register_name, index, segment, index
                 )
             }
-            _ => panic!("internal error"),
+            Pop(Segment::MappedMemory(Temp), index) => format!(
+                "// = pop temp {:2} ===========\n\
+                 @5\n\
+                 D=A\n\
+                 @{}\n\
+                 D=D+A\n\
+                 @R13\n\
+                 M=D    // R13 = &temp[{}]\n\
+                 @SP\n\
+                 M=M-1  // *SP -= 1\n\
+                 A=M\n\
+                 D=M    // D = **SP\n\
+                 @R13\n\
+                 A=M\n\
+                 M=D    // *R13 = D\n\
+                 // ===========================\n",
+                index, index, index
+            ),
+            Pop(Segment::MappedMemory(Pointer), index) => format!(
+                "// = pop pointer {:2}  =========\n\
+                     @SP\n\
+                     M=M-1  // *SP -= 1\n\
+                     A=M\n\
+                     D=M    // D = **SP\n\
+                     @{}
+                     M=D    // pointer[{}] = D\n\
+                     // ===========================\n",
+                index,
+                self.get_pointer_resigter_name(*index),
+                index
+            ),
+            Pop(Segment::Static, index) => format!(
+                "// = pop static {}  =========\n\
+                     @SP\n\
+                     M=M-1  // *SP -= 1\n\
+                     A=M\n\
+                     D=M    // D = **SP\n\
+                     @{}.{}
+                     M=D    // pointer[{}] = D\n\
+                     // ===========================\n",
+                index,
+                self.filename.expect("no filename"),
+                index,
+                index
+            ),
+            Pop(Segment::Constant, _) => panic!("pop constant N is invalid."),
+            _ => unimplemented!("TODO: the other instructions"),
         };
 
         self.target.write_all(instructions.as_bytes())
     }
 
-    fn segment_to_register(&self, segment: &Segment) -> &'static str {
+    fn get_indirect_register_name(&self, segment: &Indirect) -> &'static str {
         match segment {
-            Segment::Local => "LCL",
-            Segment::Argument => "ARG",
-            Segment::This => "THIS",
-            Segment::That => "THAT",
-            _ => panic!("internal error"),
+            Indirect::Local => "LCL",
+            Indirect::Argument => "ARG",
+            Indirect::This => "THIS",
+            Indirect::That => "THAT",
+        }
+    }
+
+    fn get_pointer_resigter_name(&self, index: Index) -> &'static str {
+        match index {
+            0 => "THIS",
+            1 => "THAT",
+            _ => panic!("unexpected pointer segment: {}", index),
         }
     }
 }

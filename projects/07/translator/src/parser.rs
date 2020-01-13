@@ -3,30 +3,60 @@ use std::io::BufRead;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Segment {
-    Argument,
-    Local,
+    Indirect(Indirect),
+    MappedMemory(MappedMemory),
     Static,
     Constant,
-    This,
-    That,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum MappedMemory {
     Pointer,
     Temp,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum Indirect {
+    Argument,
+    Local,
+    This,
+    That,
+}
+
 impl fmt::Display for Segment {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Segment::Indirect(i) => write!(f, "{}", i),
+            Segment::MappedMemory(m) => write!(f, "{}", m),
+            Segment::Static => write!(f, "static"),
+            Segment::Constant => write!(f, "constant"),
+        }
+    }
+}
+
+impl fmt::Display for MappedMemory {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
             "{}",
             match self {
-                Segment::Argument => "argument",
-                Segment::Local => "local",
-                Segment::Static => "static",
-                Segment::Constant => "constant",
-                Segment::This => "this",
-                Segment::That => "that",
-                Segment::Pointer => "pointer",
-                Segment::Temp => "temp",
+                MappedMemory::Pointer => "pointer",
+                MappedMemory::Temp => "temp",
+            }
+        )
+    }
+}
+
+impl fmt::Display for Indirect {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Indirect::Argument => "argument",
+                Indirect::Local => "local",
+                Indirect::This => "this",
+                Indirect::That => "that",
             }
         )
     }
@@ -70,16 +100,18 @@ impl<'a, T: BufRead> Parser<'a, T> {
     }
 
     fn parse_segment<'b>(segment: &'b str) -> Segment {
+        use Indirect::*;
+        use MappedMemory::*;
         match segment {
-            "argument" => Segment::Argument,
-            "local" => Segment::Local,
+            "argument" => Segment::Indirect(Argument),
+            "local" => Segment::Indirect(Local),
+            "this" => Segment::Indirect(This),
+            "that" => Segment::Indirect(That),
+            "pointer" => Segment::MappedMemory(Pointer),
+            "temp" => Segment::MappedMemory(Temp),
             "static" => Segment::Static,
             "constant" => Segment::Constant,
-            "this" => Segment::This,
-            "that" => Segment::That,
-            "pointer" => Segment::Pointer,
-            "temp" => Segment::Temp,
-            _ => panic!("Invalid segment: [{}]", segment),
+            _ => panic!("Invalid segment ({}) is given.", segment),
         }
     }
 }
@@ -176,7 +208,7 @@ mod tests {
         assert_eq!(
             vec![
                 Command::Push(Segment::Constant, 3030),
-                Command::Pop(Segment::Pointer, 0),
+                Command::Pop(Segment::MappedMemory(MappedMemory::Pointer), 0),
                 Command::Push(Segment::Constant, 3040)
             ],
             parser.collect::<Vec<_>>()
