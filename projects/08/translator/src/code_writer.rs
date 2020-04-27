@@ -295,7 +295,28 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                 index
             ),
             Pop(Segment::Constant, _) => panic!("pop constant N is invalid."),
-            _ => unimplemented!("TODO: the other instructions"),
+            Label(name) => format!("({})\n", self.derive_label(name)),
+            Goto(name) => format!(
+                "// = goto {}  =========\n\
+                     @{}\n\
+                     0;JMP\n\
+                    // ===========================\n",
+                name,
+                self.derive_label(name)
+            ),
+            IfGoto(name) => format!(
+                "// = if goto {}  =========\n\
+                     @SP\n\
+                     M=M-1  // *SP -= 1\n\
+                     A=M\n\
+                     D=M\n\
+                     @{}\n\
+                     D;JNE\n\
+                    // ===========================\n",
+                name,
+                self.derive_label(name)
+            ),
+            _ => unimplemented!("unimplemented {:?}", command),
         };
 
         self.target.write_all(instructions.as_bytes())
@@ -316,5 +337,9 @@ impl<'a, W: Write> CodeWriter<'a, W> {
             1 => "THAT",
             _ => panic!("unexpected pointer segment: {}", index),
         }
+    }
+
+    fn derive_label(&self, name: &String) -> String {
+        format!("{}.{}", self.filename.expect("No filename"), name)
     }
 }
