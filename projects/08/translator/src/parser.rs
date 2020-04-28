@@ -80,7 +80,7 @@ pub enum Command {
     Label(String),
     Goto(String),
     IfGoto(String),
-    Function,
+    Function(String, u16),
     Return,
     Call,
 }
@@ -175,7 +175,12 @@ impl<'a, T: BufRead> Iterator for Parser<'a, T> {
             "label" => Command::Label(command[1].to_string()),
             "goto" => Command::Goto(command[1].to_string()),
             "if-goto" => Command::IfGoto(command[1].to_string()),
-            "function" => Command::Function,
+            "function" => Command::Function(
+                command[1].to_string(),
+                command[2]
+                    .parse::<u16>()
+                    .expect("The 2nd argument cannot be parse"),
+            ),
             "return" => Command::Return,
             "call" => Command::Call,
             command => panic!("Invalid command: [{}]", command),

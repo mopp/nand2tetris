@@ -316,6 +316,71 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                 name,
                 self.derive_label(name)
             ),
+            Function(name, count_args) => {
+                let mut pushes = String::new();
+                for _ in 0..*count_args {
+                    pushes.push_str("M=0\nA=A+1\n");
+                }
+                format!(
+                    "// = function {} {}  =========\n\
+                ({})\n\
+                    @LCL\n\
+                    A=M\n\
+                    {}\n\
+                // ===========================\n",
+                    name, count_args, name, pushes
+                )
+            }
+            Return => "// = return ======\n\
+                    @5\n\
+                    D=A\n\
+                    @LCL\n\
+                    A=M-D\n\
+                    D=M\n\
+                    @R13\n\
+                    M=D     // *R13 = return_addr\n\
+                    @SP\n\
+                    A=M-1\n\
+                    D=M\n\
+                    @ARG\n\
+                    A=M\n\
+                    M=D     // **ARG = return_value\n\
+                    @ARG\n\
+                    D=M+1\n\
+                    @SP\n\
+                    M=D     // *SP = *ARG + 1\n\
+                    @LCL\n\
+                    D=M     // D = *LCL\n\
+                    D=D-1\n\
+                    @R14\n\
+                    M=D\n\
+                    A=D\n\
+                    D=M\n\
+                    @THAT\n\
+                    M=D     // *THAT = (**LCL - 1)\n\
+                    @R14\n\
+                    M=M-1\n\
+                    A=M\n\
+                    D=M\n\
+                    @THIS\n\
+                    M=D     // *THIS = (**LCL - 2)\n\
+                    @R14\n\
+                    M=M-1\n\
+                    A=M\n\
+                    D=M\n\
+                    @ARG\n\
+                    M=D     // *ARG = (**LCL - 3)\n\
+                    @R14\n\
+                    M=M-1\n\
+                    A=M\n\
+                    D=M\n\
+                    @LCL\n\
+                    M=D     // *LCL = (**LCL - 4)\n\
+                    @R13\n\
+                    A=M\n\
+                    0;JMP   // Jump to return address.\n\
+                 // ==============="
+                .to_string(),
             _ => unimplemented!("unimplemented {:?}", command),
         };
 
@@ -340,6 +405,6 @@ impl<'a, W: Write> CodeWriter<'a, W> {
     }
 
     fn derive_label(&self, name: &String) -> String {
-        format!("{}.{}", self.filename.expect("No filename"), name)
+        format!("{}", name)
     }
 }
