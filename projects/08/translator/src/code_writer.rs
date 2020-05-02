@@ -4,7 +4,6 @@ use std::io::Result;
 
 pub struct CodeWriter<'a, W: Write> {
     target: &'a mut W,
-    filename: Option<&'a str>,
     label_counter: usize,
 }
 
@@ -12,16 +11,15 @@ impl<'a, W: Write> CodeWriter<'a, W> {
     pub fn new(target: &'a mut W) -> Self {
         Self {
             target,
-            filename: None,
             label_counter: 0,
         }
     }
 
-    pub fn set_filename(&mut self, filename: &'a str) {
-        self.filename = Some(filename);
+    pub fn write_bootstrap_code(&mut self) -> Result<()> {
+        Ok(())
     }
 
-    pub fn put(&mut self, command: &Command) -> Result<()> {
+    pub fn put(&mut self, file_name: &str, command: &Command) -> Result<()> {
         use Command::*;
         use MappedMemory::*;
         let instructions = match command {
@@ -212,9 +210,7 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                      A=M-1\n\
                      M=D    // **SP = D\n\
                      // ===========================\n",
-                index,
-                self.filename.expect("no filename"),
-                index
+                index, file_name, index
             ),
             Push(Segment::Constant, index) => format!(
                 "// = push constant {:5} =====\n\
@@ -289,10 +285,7 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                      @{}.{}
                      M=D    // pointer[{}] = D\n\
                      // ===========================\n",
-                index,
-                self.filename.expect("no filename"),
-                index,
-                index
+                index, file_name, index, index
             ),
             Pop(Segment::Constant, _) => panic!("pop constant N is invalid."),
             Label(name) => format!("({})\n", self.derive_label(name)),
