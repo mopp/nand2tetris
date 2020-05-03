@@ -2,6 +2,9 @@ use super::parser::{Command, Index, Indirect, MappedMemory, Segment};
 use std::io::prelude::*;
 use std::io::Result;
 
+const INITIAL_GLOBAL_STACK_ADDR: u16 = 256;
+const INITIAL_FUNCTION_NAME: &str = "Sys.init";
+
 pub struct CodeWriter<'a, W: Write> {
     target: &'a mut W,
     label_counter: usize,
@@ -16,7 +19,18 @@ impl<'a, W: Write> CodeWriter<'a, W> {
     }
 
     pub fn write_bootstrap_code(&mut self) -> Result<()> {
-        Ok(())
+        let code = format!(
+            "// Bootstrap code\n\
+            @{}\n\
+            D=A\n\
+            @SP\n\
+            M=D     // SP=256\n\
+            @{}\n\
+            0;JMP\n\n",
+            INITIAL_GLOBAL_STACK_ADDR, INITIAL_FUNCTION_NAME
+        );
+
+        self.target.write_all(code.as_bytes())
     }
 
     pub fn put(&mut self, file_name: &str, command: &Command) -> Result<()> {
