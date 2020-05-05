@@ -24,13 +24,15 @@ impl<'a, W: Write> CodeWriter<'a, W> {
             @{}\n\
             D=A\n\
             @SP\n\
-            M=D     // SP=256\n\
-            @{}\n\
-            0;JMP\n\n",
-            INITIAL_GLOBAL_STACK_ADDR, INITIAL_FUNCTION_NAME
+            M=D     // SP=256\n",
+            INITIAL_GLOBAL_STACK_ADDR
         );
+        self.target.write_all(code.as_bytes())?;
 
-        self.target.write_all(code.as_bytes())
+        self.put(
+            "Bootstrap.vm",
+            &Command::Call(INITIAL_FUNCTION_NAME.to_string(), 0),
+        )
     }
 
     pub fn put(&mut self, file_name: &str, command: &Command) -> Result<()> {
@@ -75,7 +77,7 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                  // ===========================\n"
                 .to_string(),
             Or => "// = or ======================\n\
-                 @SP\n\
+                @SP\n\
                  M=M-1  // *SP -= 1\n\
                  A=M\n\
                  D=M    // D = **SP\n\
@@ -386,9 +388,62 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                     @R13\n\
                     A=M\n\
                     0;JMP   // Jump to return address.\n\
-                 // ==============="
+                 // ===============\n"
                 .to_string(),
-            _ => unimplemented!("unimplemented {:?}", command),
+            Call(name, argc) => {
+                self.label_counter += 1;
+                let n = self.label_counter;
+
+                format!(
+                    "// call {} {}\n\
+                     @return_addr{}\n\
+                     D=A\n\
+                     @SP\n\
+                     M=M+1\n\
+                     A=M-1\n\
+                     M=D    // push return address\n\
+                     @LCL\n\
+                     D=M\n\
+                     @SP\n\
+                     M=M+1\n\
+                     A=M-1\n\
+                     M=D    // push LCL\n\
+                     @ARG\n\
+                     D=M\n\
+                     @SP\n\
+                     M=M+1\n\
+                     A=M-1\n\
+                     M=D    // push ARG\n\
+                     @THIS\n\
+                     D=M\n\
+                     @SP\n\
+                     M=M+1\n\
+                     A=M-1\n\
+                     M=D    // push THIS\n\
+                     @THAT\n\
+                     D=M\n\
+                     @SP\n\
+                     M=M+1\n\
+                     A=M-1\n\
+                     M=D    // push THAT\n\
+                     @SP\n\
+                     D=M\n\
+                     @{}\n\
+                     D=D-A\n\
+                     @5\n\
+                     D=D-A\n\
+                     @ARG\n\
+                     M=D    // *ARG = SP - n - 5\n\
+                     @SP\n\
+                     D=M\n\
+                     @LCL\n\
+                     M=D    // *LCL = SP\n\
+                     @{}\n\
+                     0;JMP  // goto {}\n\
+                     (return_addr{})\n",
+                    name, argc, n, argc, name, name, n
+                )
+            }
         };
 
         self.target.write_all(instructions.as_bytes())

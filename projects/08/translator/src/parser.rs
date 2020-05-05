@@ -82,7 +82,7 @@ pub enum Command {
     IfGoto(String),
     Function(String, u16),
     Return,
-    Call,
+    Call(String, u16),
 }
 
 #[derive(Debug)]
@@ -182,7 +182,12 @@ impl<'a, T: BufRead> Iterator for Parser<'a, T> {
                     .expect("The 2nd argument cannot be parse"),
             ),
             "return" => Command::Return,
-            "call" => Command::Call,
+            "call" => Command::Call(
+                command[1].to_string(),
+                command[2]
+                    .parse::<u16>()
+                    .expect("The 2nd argument cannot be parse"),
+            ),
             command => panic!("Invalid command: [{}]", command),
         })
     }
