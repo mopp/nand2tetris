@@ -342,12 +342,12 @@ impl<'a, W: Write> CodeWriter<'a, W> {
             ),
             Segment::MappedMemory(Pointer) => format!(
                 "\
-                // pop pointer {index}  =========\n\
+                // pop pointer {index}\n\
                 @SP\n\
                 M=M-1 // *SP -= 1\n\
                 A=M\n\
                 D=M // D = **SP\n\
-                @{register_name}
+                @{register_name}\n\
                 M=D // pointer[{index}] = D\n\
                 ",
                 index = index,
@@ -360,7 +360,7 @@ impl<'a, W: Write> CodeWriter<'a, W> {
                 M=M-1 // *SP -= 1\n\
                 A=M\n\
                 D=M // D = **SP\n\
-                @{file_name}.{index}
+                @{file_name}.{index}\n\
                 M=D // pointer[{index}] = D\n\
                 ",
                 index = index,
