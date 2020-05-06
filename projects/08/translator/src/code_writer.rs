@@ -140,8 +140,6 @@ impl<'a, W: Write> CodeWriter<'a, W> {
     }
 
     fn generate_eq(&mut self) -> String {
-        self.label_counter += 1;
-        let n = self.label_counter;
         format!(
             "\
             // eq\n\
@@ -164,13 +162,11 @@ impl<'a, W: Write> CodeWriter<'a, W> {
             A=M-1\n\
             M=D // *(*SP - 1) = D\n\
             ",
-            n = n
+            n = self.use_label_counter()
         )
     }
 
     fn generate_lt(&mut self) -> String {
-        self.label_counter += 1;
-        let n = self.label_counter;
         format!(
             "\
             // lt\n\
@@ -193,13 +189,11 @@ impl<'a, W: Write> CodeWriter<'a, W> {
             A=M-1\n\
             M=D // *(*SP - 1) = D\n\
             ",
-            n = n
+            n = self.use_label_counter()
         )
     }
 
     fn generate_gt(&mut self) -> String {
-        self.label_counter += 1;
-        let n = self.label_counter;
         format!(
             "\
             // gt\n\
@@ -222,7 +216,7 @@ impl<'a, W: Write> CodeWriter<'a, W> {
             A=M-1\n\
             M=D // *(*SP - 1) = D\n\
             ",
-            n = n
+            n = self.use_label_counter()
         )
     }
 
@@ -492,9 +486,6 @@ impl<'a, W: Write> CodeWriter<'a, W> {
     }
 
     fn generate_call(&mut self, name: &String, argc: u16) -> String {
-        self.label_counter += 1;
-        let n = self.label_counter;
-
         format!(
             "\
             // call {name} {argc}\n\
@@ -546,7 +537,7 @@ impl<'a, W: Write> CodeWriter<'a, W> {
             ",
             name = name,
             argc = argc,
-            n = n
+            n = self.use_label_counter()
         )
     }
 
@@ -565,5 +556,10 @@ impl<'a, W: Write> CodeWriter<'a, W> {
             1 => "THAT",
             _ => panic!("unexpected pointer segment: {}", index),
         }
+    }
+
+    fn use_label_counter(&mut self) -> usize {
+        self.label_counter += 1;
+        self.label_counter
     }
 }
