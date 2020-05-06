@@ -404,10 +404,18 @@ impl<'a, W: Write> CodeWriter<'a, W> {
         let mut body = String::new();
         if argc != 0 {
             body.push_str(
-                "\
-                @LCL\n\
-                A=M\n\
-                ",
+                format!(
+                    "\
+                    @{argc}\n\
+                    D=A\n\
+                    @SP\n\
+                    M=M+D\n\
+                    @LCL\n\
+                    A=M\n\
+                    ",
+                    argc = argc
+                )
+                .as_str(),
             );
             for _ in 0..argc {
                 body.push_str(
