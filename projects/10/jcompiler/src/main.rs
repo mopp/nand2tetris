@@ -2,7 +2,7 @@ mod tokenizer;
 
 use std::env;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::Read;
 use std::io::{Error, ErrorKind};
 use std::path::PathBuf;
 use tokenizer::Tokenizer;
@@ -15,17 +15,15 @@ fn main() -> Result<(), std::io::Error> {
 
     let file_tuples = find_jack_paths(&given_path)?;
 
-    for (jack_path, token_path, _parse_path) in file_tuples {
-        println!(
-            "Begin to tokenize {} into {}",
-            jack_path.to_str().unwrap(),
-            token_path.to_str().unwrap()
-        );
-        let mut jack_file = BufReader::new(File::open(&jack_path)?);
-        let tokenizer = Tokenizer::new(&mut jack_file)?;
+    for (jack_path, _token_path, _parse_path) in file_tuples {
+        let mut jack_file = File::open(&jack_path)?;
+        let mut jack_code = String::new();
+        jack_file.read_to_string(&mut jack_code)?;
 
-        let token_file = File::create(token_path)?;
-        for token in tokenizer {}
+        let mut tokenizer = Tokenizer::new(jack_code.as_str());
+        while let Some(token) = tokenizer.next() {
+            println!("{:?}", token);
+        }
     }
 
     Ok(())
