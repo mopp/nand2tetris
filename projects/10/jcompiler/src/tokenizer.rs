@@ -67,14 +67,6 @@ pub struct Tokenizer<'a> {
     current: &'a str,
 }
 
-// impl<'a> Iterator for Tokenizer<'a> {
-//     type Item = Token;
-//
-//     fn next(&mut self) -> Option<Self::Item> {
-//         None
-//     }
-// }
-
 impl<'a> Tokenizer<'a> {
     pub fn new(current: &'a str) -> Self {
         Self { current }
