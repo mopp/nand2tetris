@@ -55,6 +55,13 @@ pub enum Symbol {
     Not,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum Error {
+    StringNotClosed,
+    MultiLineCommentNotClosed,
+    OneLineCommentNotClosed,
+}
+
 #[derive(Debug)]
 pub struct Tokenizer<'a> {
     current: &'a str,
@@ -73,11 +80,11 @@ impl<'a> Tokenizer<'a> {
         Self { current }
     }
 
-    pub fn next(&mut self) -> Option<Token> {
-        self.skip();
+    pub fn next(&mut self) -> Result<Option<Token>, Error> {
+        self.skip()?;
 
         if self.current.is_empty() {
-            return None;
+            return Ok(None);
         }
 
         // Tokenize single character symbol.
@@ -107,7 +114,7 @@ impl<'a> Tokenizer<'a> {
 
         if r.is_some() {
             self.current = &self.current[1..];
-            return r;
+            return Ok(r);
         }
 
         // Tokenize string constant.
@@ -115,53 +122,60 @@ impl<'a> Tokenizer<'a> {
             if let Some(pos) = self.current[1..].find('"') {
                 let r = Some(Token::StringConstant(self.current[1..=pos].to_string()));
                 self.current = &self.current[pos + 2..];
-                return r;
+                return Ok(r);
             } else {
                 // TODO: Use Error.
-                panic!("string is not closed.")
+                return Err(Error::StringNotClosed);
             }
         }
 
         // Tokenize word.
-        let pos = self.find_token_tail()?;
+        let pos = if let Some(pos) = self.find_token_tail() {
+            pos
+        } else {
+            panic!("unexpected error: cannot find token");
+        };
+
         let word = &self.current[0..pos];
         self.current = &self.current[pos..];
 
         use Keyword::*;
         use Symbol::*;
-        match word {
-            "class" => Some(Token::Keyword(Class)),
-            "constructor" => Some(Token::Keyword(Constructor)),
-            "function" => Some(Token::Keyword(Function)),
-            "method" => Some(Token::Keyword(Method)),
-            "field" => Some(Token::Keyword(Field)),
-            "static" => Some(Token::Keyword(Static)),
-            "var" => Some(Token::Keyword(Var)),
-            "int" => Some(Token::Keyword(Int)),
-            "char" => Some(Token::Keyword(Char)),
-            "boolean" => Some(Token::Keyword(Boolean)),
-            "void" => Some(Token::Keyword(Void)),
-            "true" => Some(Token::Keyword(True)),
-            "false" => Some(Token::Keyword(False)),
-            "null" => Some(Token::Keyword(Null)),
-            "this" => Some(Token::Keyword(This)),
-            "let" => Some(Token::Keyword(Let)),
-            "do" => Some(Token::Keyword(Do)),
-            "if" => Some(Token::Keyword(If)),
-            "else" => Some(Token::Keyword(Else)),
-            "while" => Some(Token::Keyword(While)),
-            "return" => Some(Token::Keyword(Return)),
+        let token = match word {
+            "class" => Token::Keyword(Class),
+            "constructor" => Token::Keyword(Constructor),
+            "function" => Token::Keyword(Function),
+            "method" => Token::Keyword(Method),
+            "field" => Token::Keyword(Field),
+            "static" => Token::Keyword(Static),
+            "var" => Token::Keyword(Var),
+            "int" => Token::Keyword(Int),
+            "char" => Token::Keyword(Char),
+            "boolean" => Token::Keyword(Boolean),
+            "void" => Token::Keyword(Void),
+            "true" => Token::Keyword(True),
+            "false" => Token::Keyword(False),
+            "null" => Token::Keyword(Null),
+            "this" => Token::Keyword(This),
+            "let" => Token::Keyword(Let),
+            "do" => Token::Keyword(Do),
+            "if" => Token::Keyword(If),
+            "else" => Token::Keyword(Else),
+            "while" => Token::Keyword(While),
+            "return" => Token::Keyword(Return),
             word => {
                 if let Ok(integer) = word.parse::<u16>() {
-                    Some(Token::IntegerConstant(integer))
+                    Token::IntegerConstant(integer)
                 } else {
-                    Some(Token::Identifier(word.to_string()))
+                    Token::Identifier(word.to_string())
                 }
             }
-        }
+        };
+
+        Ok(Some(token))
     }
 
-    fn skip(&mut self) {
+    fn skip(&mut self) -> Result<(), Error> {
         loop {
             match self.current.as_bytes() {
                 [b' ', ..] | [b'\t', ..] | [b'\n', ..] | [b'\r', ..] => {
@@ -173,8 +187,7 @@ impl<'a> Tokenizer<'a> {
                     if let Some(pos) = self.current.find('\n') {
                         self.current = &self.current[pos + 1..];
                     } else {
-                        // TODO: Use Error.
-                        panic!("invalid comment!")
+                        return Err(Error::OneLineCommentNotClosed);
                     }
                 }
                 [b'/', b'*', b'*', ..] => {
@@ -182,13 +195,14 @@ impl<'a> Tokenizer<'a> {
                     if let Some(pos) = self.current.find("*/") {
                         self.current = &self.current[pos + 2..];
                     } else {
-                        // TODO: Use Error.
-                        panic!("invalid comment!")
+                        return Err(Error::MultiLineCommentNotClosed);
                     }
                 }
                 _ => break,
             }
         }
+
+        Ok(())
     }
 
     fn find_token_tail(&self) -> Option<usize> {
@@ -222,42 +236,42 @@ mod tests {
         let mut tokenizer = Tokenizer::new(src);
         use Keyword::*;
         use Symbol::*;
-        assert_eq!(Some(Token::Keyword(Class)), tokenizer.next());
+        assert_eq!(Ok(Some(Token::Keyword(Class))), tokenizer.next());
         assert_eq!(
-            Some(Token::Identifier("Main".to_string())),
+            Ok(Some(Token::Identifier("Main".to_string()))),
             tokenizer.next()
         );
-        assert_eq!(Some(Token::Symbol(BraceLeft)), tokenizer.next());
-        assert_eq!(Some(Token::Keyword(Function)), tokenizer.next());
-        assert_eq!(Some(Token::Keyword(Void)), tokenizer.next());
+        assert_eq!(Ok(Some(Token::Symbol(BraceLeft))), tokenizer.next());
+        assert_eq!(Ok(Some(Token::Keyword(Function))), tokenizer.next());
+        assert_eq!(Ok(Some(Token::Keyword(Void))), tokenizer.next());
         assert_eq!(
-            Some(Token::Identifier("main".to_string())),
+            Ok(Some(Token::Identifier("main".to_string()))),
             tokenizer.next()
         );
-        assert_eq!(Some(Token::Symbol(ParenthesLeft)), tokenizer.next());
-        assert_eq!(Some(Token::Symbol(ParenthesRight)), tokenizer.next());
-        assert_eq!(Some(Token::Symbol(BraceLeft)), tokenizer.next());
-        assert_eq!(Some(Token::Keyword(Do)), tokenizer.next());
+        assert_eq!(Ok(Some(Token::Symbol(ParenthesLeft))), tokenizer.next());
+        assert_eq!(Ok(Some(Token::Symbol(ParenthesRight))), tokenizer.next());
+        assert_eq!(Ok(Some(Token::Symbol(BraceLeft))), tokenizer.next());
+        assert_eq!(Ok(Some(Token::Keyword(Do))), tokenizer.next());
         assert_eq!(
-            Some(Token::Identifier("Output".to_string())),
+            Ok(Some(Token::Identifier("Output".to_string()))),
             tokenizer.next()
         );
-        assert_eq!(Some(Token::Symbol(Dot)), tokenizer.next());
+        assert_eq!(Ok(Some(Token::Symbol(Dot))), tokenizer.next());
         assert_eq!(
-            Some(Token::Identifier("printString".to_string())),
+            Ok(Some(Token::Identifier("printString".to_string()))),
             tokenizer.next()
         );
-        assert_eq!(Some(Token::Symbol(ParenthesLeft)), tokenizer.next());
+        assert_eq!(Ok(Some(Token::Symbol(ParenthesLeft))), tokenizer.next());
         assert_eq!(
-            Some(Token::StringConstant("THE AVERAGE IS: ".to_string())),
+            Ok(Some(Token::StringConstant("THE AVERAGE IS: ".to_string()))),
             tokenizer.next()
         );
-        assert_eq!(Some(Token::Symbol(ParenthesRight)), tokenizer.next());
-        assert_eq!(Some(Token::Symbol(SemiColon)), tokenizer.next());
-        assert_eq!(Some(Token::Keyword(Return)), tokenizer.next());
-        assert_eq!(Some(Token::Symbol(SemiColon)), tokenizer.next());
-        assert_eq!(Some(Token::Symbol(BraceRight)), tokenizer.next());
-        assert_eq!(Some(Token::Symbol(BraceRight)), tokenizer.next());
-        assert_eq!(None, tokenizer.next());
+        assert_eq!(Ok(Some(Token::Symbol(ParenthesRight))), tokenizer.next());
+        assert_eq!(Ok(Some(Token::Symbol(SemiColon))), tokenizer.next());
+        assert_eq!(Ok(Some(Token::Keyword(Return))), tokenizer.next());
+        assert_eq!(Ok(Some(Token::Symbol(SemiColon))), tokenizer.next());
+        assert_eq!(Ok(Some(Token::Symbol(BraceRight))), tokenizer.next());
+        assert_eq!(Ok(Some(Token::Symbol(BraceRight))), tokenizer.next());
+        assert_eq!(Ok(None), tokenizer.next());
     }
 }

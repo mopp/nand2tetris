@@ -21,7 +21,7 @@ fn main() -> Result<(), std::io::Error> {
         jack_file.read_to_string(&mut jack_code)?;
 
         let mut tokenizer = Tokenizer::new(jack_code.as_str());
-        while let Some(token) = tokenizer.next() {
+        while let Ok(Some(token)) = tokenizer.next() {
             println!("{:?}", token);
         }
     }
