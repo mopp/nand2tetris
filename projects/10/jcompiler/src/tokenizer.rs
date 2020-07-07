@@ -65,17 +65,26 @@ pub enum Error {
 #[derive(Debug)]
 pub struct Tokenizer<'a> {
     current: &'a str,
+    current_token: Option<Token>,
 }
 
 impl<'a> Tokenizer<'a> {
     pub fn new(current: &'a str) -> Self {
-        Self { current }
+        Self {
+            current,
+            current_token: None,
+        }
     }
 
-    pub fn next(&mut self) -> Result<Option<Token>, Error> {
+    pub fn get_current_token(&self) -> Option<&Token> {
+        self.current_token.as_ref()
+    }
+
+    pub fn advance(&mut self) -> Result<Option<&Token>, Error> {
         self.skip()?;
 
         if self.current.is_empty() {
+            self.current_token = None;
             return Ok(None);
         }
 
@@ -106,7 +115,8 @@ impl<'a> Tokenizer<'a> {
 
         if r.is_some() {
             self.current = &self.current[1..];
-            return Ok(r);
+            self.current_token = r;
+            return Ok(self.current_token.as_ref());
         }
 
         // Tokenize string constant.
@@ -114,7 +124,8 @@ impl<'a> Tokenizer<'a> {
             if let Some(pos) = self.current[1..].find('"') {
                 let r = Some(Token::StringConstant(self.current[1..=pos].to_string()));
                 self.current = &self.current[pos + 2..];
-                return Ok(r);
+                self.current_token = r;
+                return Ok(self.current_token.as_ref());
             } else {
                 // TODO: Use Error.
                 return Err(Error::StringNotClosed);
@@ -164,7 +175,8 @@ impl<'a> Tokenizer<'a> {
             }
         };
 
-        Ok(Some(token))
+        self.current_token = Some(token);
+        Ok(self.current_token.as_ref())
     }
 
     fn skip(&mut self) -> Result<(), Error> {
@@ -228,42 +240,142 @@ mod tests {
         let mut tokenizer = Tokenizer::new(src);
         use Keyword::*;
         use Symbol::*;
-        assert_eq!(Ok(Some(Token::Keyword(Class))), tokenizer.next());
+
+        assert_eq!(None, tokenizer.get_current_token());
+
+        assert_eq!(Ok(Some(&Token::Keyword(Class))), tokenizer.advance());
+        assert_eq!(Some(&Token::Keyword(Class)), tokenizer.get_current_token());
+
         assert_eq!(
-            Ok(Some(Token::Identifier("Main".to_string()))),
-            tokenizer.next()
+            Ok(Some(&Token::Identifier("Main".to_string()))),
+            tokenizer.advance()
         );
-        assert_eq!(Ok(Some(Token::Symbol(BraceLeft))), tokenizer.next());
-        assert_eq!(Ok(Some(Token::Keyword(Function))), tokenizer.next());
-        assert_eq!(Ok(Some(Token::Keyword(Void))), tokenizer.next());
         assert_eq!(
-            Ok(Some(Token::Identifier("main".to_string()))),
-            tokenizer.next()
+            Some(&Token::Identifier("Main".to_string())),
+            tokenizer.get_current_token()
         );
-        assert_eq!(Ok(Some(Token::Symbol(ParenthesLeft))), tokenizer.next());
-        assert_eq!(Ok(Some(Token::Symbol(ParenthesRight))), tokenizer.next());
-        assert_eq!(Ok(Some(Token::Symbol(BraceLeft))), tokenizer.next());
-        assert_eq!(Ok(Some(Token::Keyword(Do))), tokenizer.next());
+
+        assert_eq!(Ok(Some(&Token::Symbol(BraceLeft))), tokenizer.advance());
         assert_eq!(
-            Ok(Some(Token::Identifier("Output".to_string()))),
-            tokenizer.next()
+            Some(&Token::Symbol(BraceLeft)),
+            tokenizer.get_current_token()
         );
-        assert_eq!(Ok(Some(Token::Symbol(Dot))), tokenizer.next());
+
+        assert_eq!(Ok(Some(&Token::Keyword(Function))), tokenizer.advance());
         assert_eq!(
-            Ok(Some(Token::Identifier("printString".to_string()))),
-            tokenizer.next()
+            Some(&Token::Keyword(Function)),
+            tokenizer.get_current_token()
         );
-        assert_eq!(Ok(Some(Token::Symbol(ParenthesLeft))), tokenizer.next());
+
+        assert_eq!(Ok(Some(&Token::Keyword(Void))), tokenizer.advance());
+        assert_eq!(Some(&Token::Keyword(Void)), tokenizer.get_current_token());
+
         assert_eq!(
-            Ok(Some(Token::StringConstant("THE AVERAGE IS: ".to_string()))),
-            tokenizer.next()
+            Ok(Some(&Token::Identifier("main".to_string()))),
+            tokenizer.advance()
         );
-        assert_eq!(Ok(Some(Token::Symbol(ParenthesRight))), tokenizer.next());
-        assert_eq!(Ok(Some(Token::Symbol(SemiColon))), tokenizer.next());
-        assert_eq!(Ok(Some(Token::Keyword(Return))), tokenizer.next());
-        assert_eq!(Ok(Some(Token::Symbol(SemiColon))), tokenizer.next());
-        assert_eq!(Ok(Some(Token::Symbol(BraceRight))), tokenizer.next());
-        assert_eq!(Ok(Some(Token::Symbol(BraceRight))), tokenizer.next());
-        assert_eq!(Ok(None), tokenizer.next());
+        assert_eq!(
+            Some(&Token::Identifier("main".to_string())),
+            tokenizer.get_current_token()
+        );
+
+        assert_eq!(Ok(Some(&Token::Symbol(ParenthesLeft))), tokenizer.advance());
+        assert_eq!(
+            Some(&Token::Symbol(ParenthesLeft)),
+            tokenizer.get_current_token()
+        );
+
+        assert_eq!(
+            Ok(Some(&Token::Symbol(ParenthesRight))),
+            tokenizer.advance()
+        );
+        assert_eq!(
+            Some(&Token::Symbol(ParenthesRight)),
+            tokenizer.get_current_token()
+        );
+
+        assert_eq!(Ok(Some(&Token::Symbol(BraceLeft))), tokenizer.advance());
+        assert_eq!(
+            Some(&Token::Symbol(BraceLeft)),
+            tokenizer.get_current_token()
+        );
+
+        assert_eq!(Ok(Some(&Token::Keyword(Do))), tokenizer.advance());
+        assert_eq!(Some(&Token::Keyword(Do)), tokenizer.get_current_token());
+
+        assert_eq!(
+            Ok(Some(&Token::Identifier("Output".to_string()))),
+            tokenizer.advance()
+        );
+        assert_eq!(
+            Some(&Token::Identifier("Output".to_string())),
+            tokenizer.get_current_token()
+        );
+
+        assert_eq!(Ok(Some(&Token::Symbol(Dot))), tokenizer.advance());
+        assert_eq!(Some(&Token::Symbol(Dot)), tokenizer.get_current_token());
+
+        assert_eq!(
+            Ok(Some(&Token::Identifier("printString".to_string()))),
+            tokenizer.advance()
+        );
+        assert_eq!(
+            Some(&Token::Identifier("printString".to_string())),
+            tokenizer.get_current_token()
+        );
+
+        assert_eq!(Ok(Some(&Token::Symbol(ParenthesLeft))), tokenizer.advance());
+        assert_eq!(
+            Some(&Token::Symbol(ParenthesLeft)),
+            tokenizer.get_current_token()
+        );
+
+        assert_eq!(
+            Ok(Some(&Token::StringConstant("THE AVERAGE IS: ".to_string()))),
+            tokenizer.advance()
+        );
+        assert_eq!(
+            Some(&Token::StringConstant("THE AVERAGE IS: ".to_string())),
+            tokenizer.get_current_token()
+        );
+
+        assert_eq!(
+            Ok(Some(&Token::Symbol(ParenthesRight))),
+            tokenizer.advance()
+        );
+        assert_eq!(
+            Some(&Token::Symbol(ParenthesRight)),
+            tokenizer.get_current_token()
+        );
+
+        assert_eq!(Ok(Some(&Token::Symbol(SemiColon))), tokenizer.advance());
+        assert_eq!(
+            Some(&Token::Symbol(SemiColon)),
+            tokenizer.get_current_token()
+        );
+
+        assert_eq!(Ok(Some(&Token::Keyword(Return))), tokenizer.advance());
+        assert_eq!(Some(&Token::Keyword(Return)), tokenizer.get_current_token());
+
+        assert_eq!(Ok(Some(&Token::Symbol(SemiColon))), tokenizer.advance());
+        assert_eq!(
+            Some(&Token::Symbol(SemiColon)),
+            tokenizer.get_current_token()
+        );
+
+        assert_eq!(Ok(Some(&Token::Symbol(BraceRight))), tokenizer.advance());
+        assert_eq!(
+            Some(&Token::Symbol(BraceRight)),
+            tokenizer.get_current_token()
+        );
+
+        assert_eq!(Ok(Some(&Token::Symbol(BraceRight))), tokenizer.advance());
+        assert_eq!(
+            Some(&Token::Symbol(BraceRight)),
+            tokenizer.get_current_token()
+        );
+
+        assert_eq!(Ok(None), tokenizer.advance());
+        assert_eq!(None, tokenizer.get_current_token());
     }
 }

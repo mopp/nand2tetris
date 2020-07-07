@@ -1,3 +1,4 @@
+mod parser;
 mod tokenizer;
 
 use std::env;
@@ -8,6 +9,7 @@ use std::io::{Error, ErrorKind};
 use std::path::PathBuf;
 use tokenizer::Token;
 use tokenizer::Tokenizer;
+// use parser::Parser;
 
 fn main() -> Result<(), io::Error> {
     let given_path = env::args()
@@ -31,21 +33,21 @@ fn main() -> Result<(), io::Error> {
 
         let mut tokenizer = Tokenizer::new(jack_code.as_str());
         loop {
-            match tokenizer.next() {
-                // Finish reading the all tokens.
-                Ok(None) => break,
+            match tokenizer.advance() {
                 Ok(Some(token)) => write_token_to_file(&mut token_file, token)?,
+
+                Ok(None) => break,
+
                 Err(error) => panic!("tokenize error: {:?}", error),
             }
         }
-
         token_file.write_all(b"</tokens>\n")?;
     }
 
     Ok(())
 }
 
-fn write_token_to_file(file: &mut File, token: Token) -> Result<(), io::Error> {
+fn write_token_to_file(file: &mut File, token: &Token) -> Result<(), io::Error> {
     let token_str = match token {
         Token::Keyword(keyword) => {
             use tokenizer::Keyword::*;
