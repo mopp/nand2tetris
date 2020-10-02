@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Token {
     Keyword(Keyword),
     Symbol(Symbol),
@@ -7,7 +7,7 @@ pub enum Token {
     StringConstant(String),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Keyword {
     Class,
     Constructor,
@@ -32,7 +32,7 @@ pub enum Keyword {
     Return,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Symbol {
     ParenthesLeft,
     ParenthesRight,
@@ -53,6 +53,66 @@ pub enum Symbol {
     Gt,
     Equal,
     Not,
+}
+
+use std::fmt;
+impl fmt::Display for Symbol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Symbol::*;
+        let s = match self {
+            ParenthesLeft => "(",
+            ParenthesRight => ")",
+            BracketLeft => "[",
+            BracketRight => "]",
+            BraceLeft => "{",
+            BraceRight => "}",
+            Dot => ".",
+            Comma => ",",
+            SemiColon => ";",
+            Plus => "+",
+            Minus => "-",
+            Star => "*",
+            Slash => "/",
+            And => "&amp;",
+            Or => "|",
+            Lt => "&lt;",
+            Gt => "&gt;",
+            Equal => "=",
+            Not => "~",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+impl fmt::Display for Keyword {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Keyword::*;
+        let k = match self {
+            Class => "class",
+            Constructor => "constructor",
+            Function => "function",
+            Method => "method",
+            Field => "field",
+            Static => "static",
+            Var => "var",
+            Int => "int",
+            Char => "char",
+            Boolean => "boolean",
+            Void => "void",
+            True => "true",
+            False => "false",
+            Null => "null",
+            This => "this",
+            Let => "let",
+            Do => "do",
+            If => "if",
+            Else => "else",
+            While => "while",
+            Return => "return",
+        };
+
+        write!(f, "{}", k)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]

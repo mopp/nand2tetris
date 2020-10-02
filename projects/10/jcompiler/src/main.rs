@@ -1,6 +1,7 @@
 mod parser;
 mod tokenizer;
 
+use parser::Parser;
 use std::env;
 use std::fs::File;
 use std::io;
@@ -9,7 +10,6 @@ use std::io::{Error, ErrorKind};
 use std::path::PathBuf;
 use tokenizer::Token;
 use tokenizer::Tokenizer;
-// use parser::Parser;
 
 fn main() -> Result<(), io::Error> {
     let given_path = env::args()
@@ -29,12 +29,17 @@ fn main() -> Result<(), io::Error> {
         jack_file.read_to_string(&mut jack_code)?;
 
         let mut token_file = File::create(token_path)?;
-        token_file.write_all(b"<tokens>\n")?;
 
         let mut tokenizer = Tokenizer::new(jack_code.as_str());
+        let mut tokens = Vec::new();
+
+        token_file.write_all(b"<tokens>\n")?;
         loop {
             match tokenizer.advance() {
-                Ok(Some(token)) => write_token_to_file(&mut token_file, token)?,
+                Ok(Some(token)) => {
+                    tokens.push(token.clone());
+                    write_token_to_file(&mut token_file, token)?
+                }
 
                 Ok(None) => break,
 
@@ -42,6 +47,13 @@ fn main() -> Result<(), io::Error> {
             }
         }
         token_file.write_all(b"</tokens>\n")?;
+
+        let mut parse_file = File::create(parse_path)?;
+        let mut parser = Parser::new(tokens, &mut parse_file);
+
+        if let Err(error) = parser.compile() {
+            panic!("{:?}", error);
+        }
     }
 
     Ok(())
@@ -49,60 +61,9 @@ fn main() -> Result<(), io::Error> {
 
 fn write_token_to_file(file: &mut File, token: &Token) -> Result<(), io::Error> {
     let token_str = match token {
-        Token::Keyword(keyword) => {
-            use tokenizer::Keyword::*;
-            let k = match keyword {
-                Class => "class",
-                Constructor => "constructor",
-                Function => "function",
-                Method => "method",
-                Field => "field",
-                Static => "static",
-                Var => "var",
-                Int => "int",
-                Char => "char",
-                Boolean => "boolean",
-                Void => "void",
-                True => "true",
-                False => "false",
-                Null => "null",
-                This => "this",
-                Let => "let",
-                Do => "do",
-                If => "if",
-                Else => "else",
-                While => "while",
-                Return => "return",
-            };
+        Token::Keyword(keyword) => format!("<keyword> {} </keyword>\n", keyword),
 
-            format!("<keyword> {} </keyword>\n", k)
-        }
-
-        Token::Symbol(symbol) => {
-            use tokenizer::Symbol::*;
-            let s = match symbol {
-                ParenthesLeft => "(",
-                ParenthesRight => ")",
-                BracketLeft => "[",
-                BracketRight => "]",
-                BraceLeft => "{",
-                BraceRight => "}",
-                Dot => ".",
-                Comma => ",",
-                SemiColon => ";",
-                Plus => "+",
-                Minus => "-",
-                Star => "*",
-                Slash => "/",
-                And => "&",
-                Or => "|",
-                Lt => "&lt;",
-                Gt => "&gt;",
-                Equal => "=",
-                Not => "!",
-            };
-            format!("<symbol> {} </symbol>\n", s)
-        }
+        Token::Symbol(symbol) => format!("<symbol> {} </symbol>\n", symbol),
 
         Token::Identifier(identifier) => format!("<identifier> {} </identifier>\n", identifier),
 
