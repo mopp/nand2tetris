@@ -372,7 +372,7 @@ impl<W: Write> Parser<W> {
         self.writeln("</letStatement>")
     }
 
-    fn compile_if(&mut self)-> Result<(), Error> {
+    fn compile_if(&mut self) -> Result<(), Error> {
         if let Keyword(If) = self.advance()? {
             self.writeln("<ifStatement>")?;
             self.increment_indent();
@@ -432,7 +432,7 @@ impl<W: Write> Parser<W> {
         self.writeln("</ifStatement>")
     }
 
-    fn compile_while(&mut self)-> Result<(), Error> {
+    fn compile_while(&mut self) -> Result<(), Error> {
         if let Keyword(While) = self.advance()? {
             self.writeln("<whileStatement>")?;
             self.increment_indent();
@@ -629,12 +629,12 @@ impl<W: Write> Parser<W> {
             Symbol(Symbol::Minus) => {
                 self.writeln("<symbol> - </symbol>")?;
                 self.compile_term()
-            },
+            }
 
             Symbol(Symbol::Not) => {
                 self.writeln("<symbol> ~ </symbol>")?;
                 self.compile_term()
-            },
+            }
 
             _ => Err(Error::UnexpectedInput("not expression".to_string())),
         }?;
