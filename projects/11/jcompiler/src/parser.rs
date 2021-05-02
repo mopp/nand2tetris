@@ -747,12 +747,12 @@ impl<W: Write> Parser<W> {
 
     fn increment_indent(&mut self) {
         for _ in 0..INDENT_SIZE {
-            self.spaces.push_str(" ");
+            self.spaces.push(' ');
         }
     }
 
     fn decrement_indent(&mut self) {
-        debug_assert!(0 <= (self.spaces.len() - INDENT_SIZE));
+        debug_assert!(INDENT_SIZE <= self.spaces.len());
 
         self.spaces.truncate(self.spaces.len() - INDENT_SIZE);
     }
@@ -837,7 +837,7 @@ mod tests {
         drop(parser);
 
         println!("{}", std::str::from_utf8(buf.as_slice()).unwrap());
-        assert_eq!(true, r.is_ok());
+        assert!(r.is_ok());
 
         let expected = concat!(
             "<class>\n",
