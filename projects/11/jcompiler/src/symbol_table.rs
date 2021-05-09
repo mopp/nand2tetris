@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 #[derive(Debug)]
-struct SymbolTable {
+pub struct SymbolTable {
     class_scope: HashMap<Identifier, SymbolInfo>,
     subroutine_scope: HashMap<Identifier, SymbolInfo>,
     count: HashMap<Kind, usize>,
@@ -41,6 +41,8 @@ impl SymbolTable {
     pub fn define(&mut self, identifier: Identifier, itype: Type, kind: Kind) {
         let index = self.var_count(kind);
         let info = SymbolInfo { itype, kind, index };
+
+        println!("define {:?} -> {:?}", identifier, info);
 
         match kind {
             Kind::Static | Kind::Field => {

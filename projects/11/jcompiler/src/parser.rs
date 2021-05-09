@@ -1,3 +1,4 @@
+use crate::symbol_table::{Kind, SymbolTable};
 use crate::tokenizer::{self, Keyword::*, Symbol, Token, Token::*};
 use std::io;
 use std::io::prelude::*;
@@ -11,6 +12,7 @@ pub struct Parser<W: Write> {
     current_index: usize,
     spaces: String,
     writer: BufWriter<W>,
+    symbol_table: SymbolTable,
 }
 
 impl<W: Write> Parser<W> {
@@ -20,6 +22,7 @@ impl<W: Write> Parser<W> {
             current_index: 0,
             spaces: String::new(),
             writer: BufWriter::new(writer),
+            symbol_table: SymbolTable::new(),
         }
     }
 
@@ -34,6 +37,8 @@ impl<W: Write> Parser<W> {
     }
 
     fn compile_class(&mut self) -> Result<(), Error> {
+        self.symbol_table = SymbolTable::new();
+
         self.writeln("<class>")?;
         self.increment_indent();
 
@@ -78,23 +83,45 @@ impl<W: Write> Parser<W> {
 
             _ => return Ok(()),
         }
-        self.current_index += 1;
+
+        let kind = match self.advance()? {
+            Keyword(Static) => Kind::Static,
+            Keyword(Field) => Kind::Field,
+            _ => panic!("unexpected!"),
+        };
 
         // type
-        match self.advance()? {
-            Keyword(Int) => self.writeln("<keyword> int </keyword>"),
-            Keyword(Char) => self.writeln("<keyword> char </keyword>"),
-            Keyword(Boolean) => self.writeln("<keyword> boolean </keyword>"),
+        let itype = match self.advance()?.clone() {
+            Keyword(Int) => {
+                self.writeln("<keyword> int </keyword>")?;
+
+                "int".to_string()
+            }
+            Keyword(Char) => {
+                self.writeln("<keyword> char </keyword>")?;
+
+                "char".to_string()
+            }
+            Keyword(Boolean) => {
+                self.writeln("<keyword> boolean </keyword>")?;
+
+                "boolean".to_string()
+            }
             Identifier(class_name) => {
                 let msg = format!("<identifier> {} </identifier>", class_name);
-                self.writeln(msg.as_str())
+                self.writeln(msg.as_str())?;
+
+                class_name.clone()
             }
 
-            _ => Err(Error::UnexpectedInput("not type".to_string())),
-        }?;
+            _ => return Err(Error::UnexpectedInput("not type".to_string())),
+        };
 
         // first variable name
-        if let Identifier(variable_name) = self.advance()? {
+        if let Identifier(variable_name) = self.advance()?.clone() {
+            self.symbol_table
+                .define(variable_name.to_string(), itype.to_string(), kind);
+
             let msg = format!("<identifier> {} </identifier>", variable_name);
             self.writeln(msg.as_str())
         } else {
@@ -113,7 +140,10 @@ impl<W: Write> Parser<W> {
             }?;
 
             // variable name
-            if let Identifier(variable_name) = self.advance()? {
+            if let Identifier(variable_name) = self.advance()?.clone() {
+                self.symbol_table
+                    .define(variable_name.to_string(), itype.to_string(), kind);
+
                 let msg = format!("<identifier> {} </identifier>", variable_name);
                 self.writeln(msg.as_str())
             } else {
@@ -128,6 +158,8 @@ impl<W: Write> Parser<W> {
     }
 
     fn compile_subroutine_dec(&mut self) -> Result<(), Error> {
+        self.symbol_table.start_subroutine();
+
         match self.peek()? {
             Keyword(keyword)
                 if keyword == &Constructor || keyword == &Method || keyword == &Function =>
@@ -217,22 +249,36 @@ impl<W: Write> Parser<W> {
 
     fn compile_parameter_list(&mut self) -> Result<(), Error> {
         // type
-        match self.peek()? {
-            Keyword(Int) => self.writeln("<keyword> int </keyword>"),
-            Keyword(Char) => self.writeln("<keyword> char </keyword>"),
-            Keyword(Boolean) => self.writeln("<keyword> boolean </keyword>"),
-            Keyword(Void) => self.writeln("<keyword> void </keyword>"),
+        let itype = match self.peek()?.clone() {
+            Keyword(Int) => {
+                self.writeln("<keyword> int </keyword>")?;
+
+                "int".to_string()
+            }
+            Keyword(Char) => {
+                self.writeln("<keyword> char </keyword>")?;
+
+                "char".to_string()
+            }
+            Keyword(Boolean) => {
+                self.writeln("<keyword> boolean </keyword>")?;
+
+                "boolean".to_string()
+            }
             Identifier(class_name) => {
                 let msg = format!("<identifier> {} </identifier>", class_name);
-                self.writeln(msg.as_str())
+                self.writeln(msg.as_str())?;
+
+                class_name.clone()
             }
 
             _ => return Ok(()),
-        }?;
+        };
         self.current_index += 1;
 
         // name
-        if let Identifier(arg_name) = self.advance()? {
+        if let Identifier(arg_name) = self.advance()?.clone() {
+            self.symbol_table.define(arg_name.to_string(), itype.to_string(), Kind::Arg);
             let msg = format!("<identifier> {} </identifier>", arg_name);
             self.writeln(msg.as_str())
         } else {
@@ -259,23 +305,37 @@ impl<W: Write> Parser<W> {
         self.current_index += 1;
 
         // type
-        match self.advance()? {
-            Keyword(Int) => self.writeln("<keyword> int </keyword>"),
-            Keyword(Char) => self.writeln("<keyword> char </keyword>"),
-            Keyword(Boolean) => self.writeln("<keyword> boolean </keyword>"),
-            Keyword(Void) => self.writeln("<keyword> void </keyword>"),
+        let itype = match self.advance()?.clone() {
+            Keyword(Int) => {
+                self.writeln("<keyword> int </keyword>")?;
+
+                "int".to_string()
+            }
+            Keyword(Char) => {
+                self.writeln("<keyword> char </keyword>")?;
+
+                "char".to_string()
+            }
+            Keyword(Boolean) => {
+                self.writeln("<keyword> boolean </keyword>")?;
+
+                "boolean".to_string()
+            }
             Identifier(class_name) => {
                 let msg = format!("<identifier> {} </identifier>", class_name);
-                self.writeln(msg.as_str())
+                self.writeln(msg.as_str())?;
+
+                class_name.clone()
             }
 
-            _ => return Ok(()),
-        }?;
+            _ => return Err(Error::UnexpectedInput("not type".to_string())),
+        };
 
         loop {
             // name
-            if let Identifier(arg_name) = self.advance()? {
-                let msg = format!("<identifier> {} </identifier>", arg_name);
+            if let Identifier(var_name) = self.advance()?.clone() {
+                self.symbol_table.define(var_name.to_string(), itype.to_string(), Kind::Var);
+                let msg = format!("<identifier> {} </identifier>", var_name);
                 self.writeln(msg.as_str())
             } else {
                 Err(Error::UnexpectedInput("not identifier".to_string()))
