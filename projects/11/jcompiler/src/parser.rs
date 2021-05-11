@@ -27,47 +27,27 @@ impl<W: Write> Parser<W> {
     }
 
     pub fn compile(&mut self) -> Result<(), Error> {
-        if &Keyword(Class) == self.advance()? {
-            self.compile_class()
-        } else {
-            Err(Error::UnexpectedInput(
-                "top level component have to be class".to_string(),
-            ))
-        }
+        self.compile_class()
     }
 
     fn compile_class(&mut self) -> Result<(), Error> {
-        self.symbol_table = SymbolTable::new();
+        if &Keyword(Class) != self.advance()? {
+            return Err(Error::UnexpectedInput(
+                "top level component have to be class".to_string(),
+            ));
+        }
 
-        self.writeln("<class>")?;
-        self.increment_indent();
-
-        self.writeln("<keyword> class </keyword>")?;
-
-        if let Identifier(identifier) = self.advance()? {
-            let msg = format!("<identifier> {} </identifier>", identifier);
-            self.writeln(msg.as_str())
+        let class_name = if let Identifier(identifier) = self.advance()? {
+            identifier.clone()
         } else {
-            Err(Error::UnexpectedInput("not identifier".to_string()))
-        }?;
+            return Err(Error::UnexpectedInput("not identifier".to_string()));
+        };
 
-        if &Symbol(Symbol::BraceLeft) == self.advance()? {
-            self.writeln("<symbol> { </symbol>")
-        } else {
-            Err(Error::UnexpectedInput("not {".to_string()))
-        }?;
-
-        self.compile_class_var_dec()?;
-        self.compile_subroutine_dec()?;
-
-        if &Symbol(Symbol::BraceRight) == self.peek()? {
-            self.writeln("<symbol> } </symbol>")
-        } else {
-            Err(Error::UnexpectedInput("not }".to_string()))
-        }?;
-
-        self.decrement_indent();
-        self.writeln("</class>")
+        self.compile_brace_block(Box::new(move |this| {
+            this.symbol_table = SymbolTable::new();
+            this.compile_class_var_dec()?;
+            this.compile_subroutine_dec(class_name)
+        }))
     }
 
     fn compile_class_var_dec(&mut self) -> Result<(), Error> {
@@ -157,97 +137,53 @@ impl<W: Write> Parser<W> {
         self.compile_class_var_dec()
     }
 
-    fn compile_subroutine_dec(&mut self) -> Result<(), Error> {
+    fn compile_subroutine_dec(&mut self, class_name: String) -> Result<(), Error> {
         self.symbol_table.start_subroutine();
 
-        match self.peek()? {
-            Keyword(keyword)
-                if keyword == &Constructor || keyword == &Method || keyword == &Function =>
-            {
-                let msg = format!("<keyword> {} </keyword>", keyword);
-
-                self.writeln("<subroutineDec>")?;
-                self.increment_indent();
-                self.writeln(msg.as_str())
-            }
-
+        let count_args = match self.peek()? {
+            Keyword(Constructor) => 0,
+            Keyword(Function) => 0,
+            Keyword(Method) => 1,
             _ => return Ok(()),
-        }?;
+        };
         self.current_index += 1;
 
-        // type
+        // Discard the type.
         match self.advance()? {
-            Keyword(Int) => self.writeln("<keyword> int </keyword>"),
-            Keyword(Char) => self.writeln("<keyword> char </keyword>"),
-            Keyword(Boolean) => self.writeln("<keyword> boolean </keyword>"),
-            Keyword(Void) => self.writeln("<keyword> void </keyword>"),
-            Identifier(class_name) => {
-                let msg = format!("<identifier> {} </identifier>", class_name);
-                self.writeln(msg.as_str())
-            }
+            Keyword(Int) => (),
+            Keyword(Char) => (),
+            Keyword(Boolean) => (),
+            Keyword(Void) => (),
+            Identifier(_) => (),
+            _ => return Err(Error::UnexpectedInput("not type".to_string())),
+        }
 
-            _ => Err(Error::UnexpectedInput("not type".to_string())),
-        }?;
-
-        // name
-        match self.advance()? {
-            Identifier(name) => {
-                let msg = format!("<identifier> {} </identifier>", name);
-                self.writeln(msg.as_str())
-            }
-
-            _ => Err(Error::UnexpectedInput("not name".to_string())),
-        }?;
-
-        if &Symbol(Symbol::ParenthesLeft) == self.advance()? {
-            self.writeln("<symbol> ( </symbol>")
+        let subroutine_name = if let Identifier(name) = self.advance()? {
+            name.clone()
         } else {
-            Err(Error::UnexpectedInput("not (".to_string()))
-        }?;
+            return Err(Error::UnexpectedInput("not name".to_string()));
+        };
 
-        self.writeln("<parameterList>")?;
-        self.increment_indent();
+        // Compile parameter list.
+        {
+            let class_name = class_name.clone();
+            self.compile_paren_block(Box::new(move |this| {
+                let count_args = count_args + this.compile_parameter_list()?;
+                let msg = format!("function {}.{} {}", class_name, subroutine_name, count_args);
+                this.writeln(msg.as_str())
+            }))?;
+        }
 
-        self.compile_parameter_list()?;
+        // Compile subrountine body.
+        self.compile_brace_block(Box::new(move |this| {
+            this.compile_var_dec()?;
+            this.compile_statements()
+        }))?;
 
-        self.decrement_indent();
-        self.writeln("</parameterList>")?;
-
-        if &Symbol(Symbol::ParenthesRight) == self.advance()? {
-            self.writeln("<symbol> ) </symbol>")
-        } else {
-            Err(Error::UnexpectedInput("not )".to_string()))
-        }?;
-
-        // subroutne body.
-        self.writeln("<subroutineBody>")?;
-        self.increment_indent();
-
-        if &Symbol(Symbol::BraceLeft) == self.advance()? {
-            self.writeln("<symbol> { </symbol>")
-        } else {
-            Err(Error::UnexpectedInput("not {".to_string()))
-        }?;
-
-        self.compile_var_dec()?;
-        self.compile_statements()?;
-
-        if &Symbol(Symbol::BraceRight) == self.advance()? {
-            self.writeln("<symbol> } </symbol>")
-        } else {
-            Err(Error::UnexpectedInput("not }".to_string()))
-        }?;
-
-        self.decrement_indent();
-        self.writeln("</subroutineBody>")?;
-
-        self.decrement_indent();
-        self.writeln("</subroutineDec>")?;
-
-        self.compile_subroutine_dec()
+        self.compile_subroutine_dec(class_name)
     }
 
-    fn compile_parameter_list(&mut self) -> Result<(), Error> {
+    fn compile_parameter_list(&mut self) -> Result<usize, Error> {
         // type
         let itype = match self.peek()?.clone() {
             Keyword(Int) => {
@@ -272,13 +208,14 @@ impl<W: Write> Parser<W> {
                 class_name.clone()
             }
 
-            _ => return Ok(()),
+            _ => return Ok(0),
         };
         self.current_index += 1;
 
         // name
         if let Identifier(arg_name) = self.advance()?.clone() {
-            self.symbol_table.define(arg_name.to_string(), itype.to_string(), Kind::Arg);
+            self.symbol_table
+                .define(arg_name.to_string(), itype.to_string(), Kind::Arg);
             let msg = format!("<identifier> {} </identifier>", arg_name);
             self.writeln(msg.as_str())
         } else {
@@ -288,10 +225,10 @@ impl<W: Write> Parser<W> {
         if let Symbol(Symbol::Comma) = self.peek()? {
             self.current_index += 1;
             self.writeln("<symbol> , </symbol>")?;
-            self.compile_parameter_list()?;
+            return Ok(self.compile_parameter_list()? + 1);
         }
 
-        Ok(())
+        Ok(1)
     }
 
     fn compile_var_dec(&mut self) -> Result<(), Error> {
@@ -334,7 +271,8 @@ impl<W: Write> Parser<W> {
         loop {
             // name
             if let Identifier(var_name) = self.advance()?.clone() {
-                self.symbol_table.define(var_name.to_string(), itype.to_string(), Kind::Var);
+                self.symbol_table
+                    .define(var_name.to_string(), itype.to_string(), Kind::Var);
                 let msg = format!("<identifier> {} </identifier>", var_name);
                 self.writeln(msg.as_str())
             } else {
@@ -793,6 +731,38 @@ impl<W: Write> Parser<W> {
 
         self.decrement_indent();
         self.writeln("</expressionList>")
+    }
+
+    fn compile_brace_block(
+        &mut self,
+        f: Box<dyn FnOnce(&mut Self) -> Result<(), Error>>,
+    ) -> Result<(), Error> {
+        self.compile_block((Symbol::BraceLeft, Symbol::BraceRight), f)
+    }
+
+    fn compile_paren_block(
+        &mut self,
+        f: Box<dyn FnOnce(&mut Self) -> Result<(), Error>>,
+    ) -> Result<(), Error> {
+        self.compile_block((Symbol::ParenthesLeft, Symbol::ParenthesRight), f)
+    }
+
+    fn compile_block(
+        &mut self,
+        surround: (Symbol, Symbol),
+        f: Box<dyn FnOnce(&mut Self) -> Result<(), Error>>,
+    ) -> Result<(), Error> {
+        if &Symbol(surround.0) != self.advance()? {
+            return Err(Error::UnexpectedInput("not {".to_string()));
+        }
+
+        f(self)?;
+
+        if &Symbol(surround.1) != self.advance()? {
+            return Err(Error::UnexpectedInput("not }".to_string()));
+        }
+
+        Ok(())
     }
 
     fn writeln(&mut self, msg: &str) -> Result<(), Error> {
