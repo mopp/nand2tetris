@@ -173,12 +173,15 @@ impl<W: Write> Parser<W> {
                 this.writeln(msg.as_str())
             }))?;
         }
+        self.increment_indent();
 
         // Compile subrountine body.
         self.compile_brace_block(Box::new(move |this| {
             this.compile_var_dec()?;
             this.compile_statements()
         }))?;
+
+        self.decrement_indent();
 
         self.compile_subroutine_dec(class_name)
     }
@@ -301,9 +304,6 @@ impl<W: Write> Parser<W> {
     }
 
     fn compile_statements(&mut self) -> Result<(), Error> {
-        self.writeln("<statements>")?;
-        self.increment_indent();
-
         loop {
             match self.peek()? {
                 Keyword(Let) => self.compile_let(),
@@ -314,9 +314,6 @@ impl<W: Write> Parser<W> {
                 _ => break,
             }?;
         }
-
-        self.decrement_indent();
-        self.writeln("</statements>")?;
 
         Ok(())
     }
@@ -472,24 +469,17 @@ impl<W: Write> Parser<W> {
     }
 
     fn compile_do(&mut self) -> Result<(), Error> {
-        if let Keyword(Do) = self.advance()? {
-            self.writeln("<doStatement>")?;
-            self.increment_indent();
-            self.writeln("<keyword> do </keyword>")?;
-        } else {
+        if &Keyword(Do) != self.advance()? {
             return Err(Error::UnexpectedInput("bug".to_string()));
         }
 
         self.compile_subroutine_call()?;
 
-        if let Symbol(Symbol::SemiColon) = self.advance()? {
-            self.writeln("<symbol> ; </symbol>")?;
-        } else {
+        if &Symbol(Symbol::SemiColon) != self.advance()? {
             return Err(Error::UnexpectedInput("not ;".to_string()));
         }
 
-        self.decrement_indent();
-        self.writeln("</doStatement>")
+        Ok(())
     }
 
     fn compile_return(&mut self) -> Result<(), Error> {
@@ -642,6 +632,7 @@ impl<W: Write> Parser<W> {
     }
 
     fn compile_subroutine_call(&mut self) -> Result<(), Error> {
+        // TODO: make method.
         match self.tokens[self.current_index + 1] {
             Symbol(Symbol::ParenthesLeft) => {
                 if let Identifier(subroutine_name) = self.advance()? {
@@ -672,65 +663,55 @@ impl<W: Write> Parser<W> {
             }
 
             Symbol(Symbol::Dot) => {
-                if let Identifier(name) = self.advance()? {
-                    let msg = format!("<identifier> {} </identifier>", name);
-                    self.writeln(msg.as_str())
+                let class_name = if let Identifier(name) = self.advance()? {
+                    name.clone()
                 } else {
-                    Err(Error::UnexpectedInput("not identifier".to_string()))
-                }?;
+                    return Err(Error::UnexpectedInput("not identifier".to_string()));
+                };
 
+                // Discard the dot.
                 self.advance()?;
-                self.writeln("<symbol> . </symbol>")?;
 
-                if let Identifier(subroutine_name) = self.advance()? {
-                    let msg = format!("<identifier> {} </identifier>", subroutine_name);
-                    self.writeln(msg.as_str())
+                let subroutine_name = if let Identifier(subroutine_name) = self.advance()? {
+                    subroutine_name.clone()
                 } else {
-                    Err(Error::UnexpectedInput("not identifier".to_string()))
-                }?;
+                    return Err(Error::UnexpectedInput("not identifier".to_string()));
+                };
 
-                if let Symbol(Symbol::ParenthesLeft) = self.advance()? {
-                    self.writeln("<symbol> ( </symbol>")
-                } else {
-                    Err(Error::UnexpectedInput("not (".to_string()))
-                }?;
-
-                if let Symbol(Symbol::ParenthesRight) = self.peek()? {
-                    self.current_index += 1;
-
-                    self.writeln("<expressionList>")?;
-                    self.writeln("</expressionList>")?;
-                    self.writeln("<symbol> ) </symbol>")
-                } else {
-                    self.compile_expression_list()?;
-                    if let Symbol(Symbol::ParenthesRight) = self.advance()? {
-                        self.writeln("<symbol> ) </symbol>")
-                    } else {
-                        Err(Error::UnexpectedInput("not )".to_string()))
-                    }
-                }?;
-
-                Ok(())
+                let count_args = self.compile_expression_list()?;
+                let msg = format!("call {}.{} {}", class_name, subroutine_name, count_args);
+                self.writeln(&msg)
             }
 
             _ => Err(Error::UnexpectedInput("not subroutine call".to_string())),
         }
     }
 
-    fn compile_expression_list(&mut self) -> Result<(), Error> {
-        self.writeln("<expressionList>")?;
-        self.increment_indent();
-
-        self.compile_expression()?;
-
-        while let Symbol(Symbol::Comma) = self.peek()? {
-            self.current_index += 1;
-            self.writeln("<symbol> , </symbol>")?;
-            self.compile_expression()?;
+    fn compile_expression_list(&mut self) -> Result<usize, Error> {
+        if &Symbol(Symbol::ParenthesLeft) != self.advance()? {
+            return Err(Error::UnexpectedInput("not (".to_string()));
         }
 
-        self.decrement_indent();
-        self.writeln("</expressionList>")
+        let mut count_expressions = 0;
+        loop {
+            match self.peek()? {
+                Symbol(Symbol::ParenthesRight) => {
+                    self.current_index += 1;
+                    break;
+                }
+                Symbol(Symbol::Comma) => {
+                    self.compile_expression()?;
+                    self.current_index += 1;
+                    count_expressions += 1;
+                }
+                _ => {
+                    self.compile_expression()?;
+                    count_expressions += 1;
+                }
+            }
+        }
+
+        Ok(count_expressions)
     }
 
     fn compile_brace_block(
