@@ -484,16 +484,13 @@ impl<W: Write> Parser<W> {
 
     fn compile_return(&mut self) -> Result<(), Error> {
         if let Keyword(Return) = self.advance()? {
-            self.writeln("<returnStatement>")?;
-            self.increment_indent();
-            self.writeln("<keyword> return </keyword>")
+            self.writeln("return ")
         } else {
             Err(Error::UnexpectedInput("bug".to_string()))
         }?;
 
         if let Symbol(Symbol::SemiColon) = self.peek()? {
             self.current_index += 1;
-            self.writeln("<symbol> ; </symbol>")?;
         } else {
             self.compile_expression()?;
             if let Symbol(Symbol::SemiColon) = self.advance()? {
@@ -503,51 +500,79 @@ impl<W: Write> Parser<W> {
             }?;
         }
 
-        self.decrement_indent();
-        self.writeln("</returnStatement>")
+        Ok(())
     }
 
     fn compile_expression(&mut self) -> Result<(), Error> {
-        self.writeln("<expression>")?;
-        self.increment_indent();
-
         self.compile_term()?;
 
-        match self.peek()? {
-            Symbol(symbol)
-                if symbol == &Symbol::Plus
-                    || symbol == &Symbol::Minus
-                    || symbol == &Symbol::Star
-                    || symbol == &Symbol::Slash
-                    || symbol == &Symbol::And
-                    || symbol == &Symbol::Or
-                    || symbol == &Symbol::Lt
-                    || symbol == &Symbol::Gt
-                    || symbol == &Symbol::Equal =>
-            {
-                let msg = format!("<symbol> {} </symbol>", symbol);
-                self.writeln(msg.as_str())?;
-
+        match self.peek()?.clone() {
+            Symbol(Symbol::Plus) => {
                 self.current_index += 1;
-                self.compile_term()
-            }
+                self.compile_term()?;
 
+                self.writeln("add")
+            }
+            Symbol(Symbol::Minus) => {
+                self.current_index += 1;
+                self.compile_term()?;
+
+                self.writeln("sub")
+            }
+            Symbol(Symbol::Star) => {
+                self.current_index += 1;
+                self.compile_term()?;
+
+                self.writeln("call Math.multiply 2")
+            }
+            Symbol(Symbol::Slash) => {
+                self.current_index += 1;
+                self.compile_term()?;
+
+                self.writeln("call Math.divide 2")
+            }
+            Symbol(Symbol::And) => {
+                self.current_index += 1;
+                self.compile_term()?;
+
+                self.writeln("and")
+            }
+            Symbol(Symbol::Or) => {
+                self.current_index += 1;
+                self.compile_term()?;
+
+                self.writeln("or")
+            }
+            Symbol(Symbol::Lt) => {
+                self.current_index += 1;
+                self.compile_term()?;
+
+                self.writeln("lt")
+            }
+            Symbol(Symbol::Gt) => {
+                self.current_index += 1;
+                self.compile_term()?;
+
+                self.writeln("gt")
+            }
+            Symbol(Symbol::Equal) => {
+                self.current_index += 1;
+                self.compile_term()?;
+
+                self.writeln("eq")
+            }
             _ => Ok(()),
         }?;
 
-        self.decrement_indent();
-        self.writeln("</expression>")
+        Ok(())
     }
 
     fn compile_term(&mut self) -> Result<(), Error> {
-        self.writeln("<term>")?;
-        self.increment_indent();
-
         // TODO: refine
         let token = self.advance()?.clone();
         match token {
             IntegerConstant(value) => {
-                let msg = format!("<integerConstant> {} </integerConstant>", value);
+                let msg = format!("push constant {}", value);
                 self.writeln(msg.as_str())
             }
 
@@ -604,11 +629,10 @@ impl<W: Write> Parser<W> {
             }
 
             Symbol(Symbol::ParenthesLeft) => {
-                self.writeln("<symbol> ( </symbol>")?;
                 self.compile_expression()?;
 
                 if let Symbol(Symbol::ParenthesRight) = self.advance()? {
-                    self.writeln("<symbol> ) </symbol>")
+                    Ok(())
                 } else {
                     Err(Error::UnexpectedInput("not )".to_string()))
                 }
@@ -627,8 +651,7 @@ impl<W: Write> Parser<W> {
             _ => Err(Error::UnexpectedInput("not expression".to_string())),
         }?;
 
-        self.decrement_indent();
-        self.writeln("</term>")
+        Ok(())
     }
 
     fn compile_subroutine_call(&mut self) -> Result<(), Error> {
@@ -679,7 +702,7 @@ impl<W: Write> Parser<W> {
                 };
 
                 let count_args = self.compile_expression_list()?;
-                let msg = format!("call {}.{} {}", class_name, subroutine_name, count_args);
+                let msg = format!("call {}.{} {}\n", class_name, subroutine_name, count_args);
                 self.writeln(&msg)
             }
 
