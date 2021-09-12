@@ -35,14 +35,18 @@ impl SymbolTable {
     }
 
     pub fn start_subroutine(&mut self) {
+        println!("start_subroutine");
+
         self.subroutine_scope.clear();
+        self.count.insert(Kind::Arg, 0);
+        self.count.insert(Kind::Var, 0);
     }
 
     pub fn define(&mut self, identifier: Identifier, itype: Type, kind: Kind) {
         let index = self.var_count(kind);
         let info = SymbolInfo { itype, kind, index };
 
-        println!("define {:?} -> {:?}", identifier, info);
+        println!("  define {:?} -> {:?}", identifier, info);
 
         match kind {
             Kind::Static | Kind::Field => {
@@ -80,7 +84,7 @@ impl SymbolTable {
         None
     }
 
-    fn var_count(&self, kind: Kind) -> usize {
+    pub fn var_count(&self, kind: Kind) -> usize {
         match self.count.get(&kind) {
             None => 0,
             Some(n) => *n,

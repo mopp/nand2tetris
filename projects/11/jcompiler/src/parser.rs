@@ -1,3 +1,4 @@
+// TODO: Build AST and generate code based on the AST.
 use crate::symbol_table::{Kind, SymbolTable};
 use crate::tokenizer::{self, Keyword::*, Symbol, Token, Token::*};
 use std::io;
@@ -13,6 +14,7 @@ pub struct Parser<W: Write> {
     spaces: String,
     writer: BufWriter<W>,
     symbol_table: SymbolTable,
+    label_counter: usize,
 }
 
 impl<W: Write> Parser<W> {
@@ -23,6 +25,7 @@ impl<W: Write> Parser<W> {
             spaces: String::new(),
             writer: BufWriter::new(writer),
             symbol_table: SymbolTable::new(),
+            label_counter: 0,
         }
     }
 
@@ -140,7 +143,8 @@ impl<W: Write> Parser<W> {
     fn compile_subroutine_dec(&mut self, class_name: String) -> Result<(), Error> {
         self.symbol_table.start_subroutine();
 
-        let count_args = match self.peek()? {
+        // FIXME: refactor.
+        match self.peek()? {
             Keyword(Constructor) => 0,
             Keyword(Function) => 0,
             Keyword(Method) => 1,
@@ -165,19 +169,25 @@ impl<W: Write> Parser<W> {
         };
 
         // Compile parameter list.
-        {
-            let class_name = class_name.clone();
-            self.compile_paren_block(Box::new(move |this| {
-                let count_args = count_args + this.compile_parameter_list()?;
-                let msg = format!("function {}.{} {}", class_name, subroutine_name, count_args);
-                this.writeln(msg.as_str())
-            }))?;
-        }
+        self.compile_paren_block(Box::new(move |this| {
+            this.compile_parameter_list()?;
+            Ok(())
+        }))?;
         self.increment_indent();
 
         // Compile subrountine body.
+        let class_name2 = class_name.clone();
         self.compile_brace_block(Box::new(move |this| {
             this.compile_var_dec()?;
+
+            let msg = format!(
+                "\nfunction {}.{} {}",
+                class_name2,
+                subroutine_name,
+                this.symbol_table.var_count(Kind::Var)
+            );
+            this.writeln(msg.as_str())?;
+
             this.compile_statements()
         }))?;
 
@@ -189,27 +199,10 @@ impl<W: Write> Parser<W> {
     fn compile_parameter_list(&mut self) -> Result<usize, Error> {
         // type
         let itype = match self.peek()?.clone() {
-            Keyword(Int) => {
-                self.writeln("<keyword> int </keyword>")?;
-
-                "int".to_string()
-            }
-            Keyword(Char) => {
-                self.writeln("<keyword> char </keyword>")?;
-
-                "char".to_string()
-            }
-            Keyword(Boolean) => {
-                self.writeln("<keyword> boolean </keyword>")?;
-
-                "boolean".to_string()
-            }
-            Identifier(class_name) => {
-                let msg = format!("<identifier> {} </identifier>", class_name);
-                self.writeln(msg.as_str())?;
-
-                class_name.clone()
-            }
+            Keyword(Int) => "int".to_string(),
+            Keyword(Char) => "char".to_string(),
+            Keyword(Boolean) => "boolean".to_string(),
+            Identifier(class_name) => class_name.clone(),
 
             _ => return Ok(0),
         };
@@ -219,15 +212,12 @@ impl<W: Write> Parser<W> {
         if let Identifier(arg_name) = self.advance()?.clone() {
             self.symbol_table
                 .define(arg_name.to_string(), itype.to_string(), Kind::Arg);
-            let msg = format!("<identifier> {} </identifier>", arg_name);
-            self.writeln(msg.as_str())
         } else {
-            Err(Error::UnexpectedInput("not identifier".to_string()))
-        }?;
+            return Err(Error::UnexpectedInput("not identifier".to_string()));
+        }
 
         if let Symbol(Symbol::Comma) = self.peek()? {
             self.current_index += 1;
-            self.writeln("<symbol> , </symbol>")?;
             return Ok(self.compile_parameter_list()? + 1);
         }
 
@@ -235,38 +225,17 @@ impl<W: Write> Parser<W> {
     }
 
     fn compile_var_dec(&mut self) -> Result<(), Error> {
-        if let Keyword(Var) = self.peek()? {
-            self.writeln("<varDec>")?;
-            self.increment_indent();
-            self.writeln("<keyword> var </keyword>")?;
-        } else {
+        if &Keyword(Var) != self.peek()? {
             return Ok(());
         }
         self.current_index += 1;
 
         // type
         let itype = match self.advance()?.clone() {
-            Keyword(Int) => {
-                self.writeln("<keyword> int </keyword>")?;
-
-                "int".to_string()
-            }
-            Keyword(Char) => {
-                self.writeln("<keyword> char </keyword>")?;
-
-                "char".to_string()
-            }
-            Keyword(Boolean) => {
-                self.writeln("<keyword> boolean </keyword>")?;
-
-                "boolean".to_string()
-            }
-            Identifier(class_name) => {
-                let msg = format!("<identifier> {} </identifier>", class_name);
-                self.writeln(msg.as_str())?;
-
-                class_name.clone()
-            }
+            Keyword(Int) => "int".to_string(),
+            Keyword(Char) => "char".to_string(),
+            Keyword(Boolean) => "boolean".to_string(),
+            Identifier(class_name) => class_name.clone(),
 
             _ => return Err(Error::UnexpectedInput("not type".to_string())),
         };
@@ -276,29 +245,22 @@ impl<W: Write> Parser<W> {
             if let Identifier(var_name) = self.advance()?.clone() {
                 self.symbol_table
                     .define(var_name.to_string(), itype.to_string(), Kind::Var);
-                let msg = format!("<identifier> {} </identifier>", var_name);
-                self.writeln(msg.as_str())
             } else {
-                Err(Error::UnexpectedInput("not identifier".to_string()))
-            }?;
+                return Err(Error::UnexpectedInput("not identifier".to_string()));
+            }
 
             match self.advance()? {
                 Symbol(Symbol::Comma) => {
-                    self.writeln("<symbol> , </symbol>")?;
                     continue;
                 }
 
                 Symbol(Symbol::SemiColon) => {
-                    self.writeln("<symbol> ; </symbol>")?;
                     break;
                 }
 
                 _ => return Err(Error::UnexpectedInput("not , or ;".to_string())),
             }
         }
-
-        self.decrement_indent();
-        self.writeln("</varDec>")?;
 
         self.compile_var_dec()
     }
@@ -319,21 +281,16 @@ impl<W: Write> Parser<W> {
     }
 
     fn compile_let(&mut self) -> Result<(), Error> {
-        if let Keyword(Let) = self.advance()? {
-            self.writeln("<letStatement>")?;
-            self.increment_indent();
-            self.writeln("<keyword> let </keyword>")?;
-        } else {
+        if &Keyword(Let) != self.advance()? {
             return Err(Error::UnexpectedInput("bug".to_string()));
         }
 
         // var name.
-        if let Identifier(arg_name) = self.advance()? {
-            let msg = format!("<identifier> {} </identifier>", arg_name);
-            self.writeln(msg.as_str())
+        let arg_name = if let Identifier(arg_name) = self.advance()? {
+            arg_name.clone()
         } else {
-            Err(Error::UnexpectedInput("not identifier".to_string()))
-        }?;
+            return Err(Error::UnexpectedInput("not identifier".to_string()));
+        };
 
         // array index.
         if let Symbol(Symbol::BracketLeft) = self.peek()? {
@@ -349,123 +306,111 @@ impl<W: Write> Parser<W> {
             }
         }
 
-        if let Symbol(Symbol::Equal) = self.advance()? {
-            self.writeln("<symbol> = </symbol>")?;
-        } else {
+        if &Symbol(Symbol::Equal) != self.advance()? {
             return Err(Error::UnexpectedInput("not =".to_string()));
         }
 
         self.compile_expression()?;
 
-        if let Symbol(Symbol::SemiColon) = self.advance()? {
-            self.writeln("<symbol> ; </symbol>")?;
+        if let Some(i) = self.symbol_table.index_of(arg_name.clone()) {
+            // TODO: Handle the type
+            let kind = match self.symbol_table.kind_of(arg_name.clone()) {
+                Some(Kind::Arg) => "argument",
+                Some(Kind::Var) => "local",
+                None => return Err(Error::UnexpectedInput("bug".to_string())),
+                _ => unimplemented!(),
+            };
+
+            let msg = format!("pop {} {}", kind, i);
+            self.writeln(&msg)?;
         } else {
+            let msg = format!("undefined variable: {}", arg_name);
+            return Err(Error::UnexpectedInput(msg));
+        }
+
+        if &Symbol(Symbol::SemiColon) != self.advance()? {
             return Err(Error::UnexpectedInput("not ;".to_string()));
         }
 
-        self.decrement_indent();
-        self.writeln("</letStatement>")
+        Ok(())
     }
 
     fn compile_if(&mut self) -> Result<(), Error> {
-        if let Keyword(If) = self.advance()? {
-            self.writeln("<ifStatement>")?;
-            self.increment_indent();
-            self.writeln("<keyword> if </keyword>")
-        } else {
-            Err(Error::UnexpectedInput("bug".to_string()))
-        }?;
+        if &Keyword(If) != self.advance()? {
+            return Err(Error::UnexpectedInput("bug".to_string()));
+        }
 
-        if let Symbol(Symbol::ParenthesLeft) = self.advance()? {
-            self.writeln("<symbol> ( </symbol>")
-        } else {
-            Err(Error::UnexpectedInput("not (".to_string()))
-        }?;
+        self.compile_paren_block(Box::new(move |this| this.compile_expression()))?;
 
-        self.compile_expression()?;
+        let label_number = self.use_label();
+        let else_label = format!("IF_ELSE{}", label_number);
+        let end_label = format!("IF_END{}", label_number);
 
-        if let Symbol(Symbol::ParenthesRight) = self.advance()? {
-            self.writeln("<symbol> ) </symbol>")
-        } else {
-            Err(Error::UnexpectedInput("not )".to_string()))
-        }?;
+        self.writeln("not")?;
+        self.writeln(format!("if-goto {}", else_label).as_ref())?;
 
-        if let Symbol(Symbol::BraceLeft) = self.advance()? {
-            self.writeln("<symbol> { </symbol>")
-        } else {
-            Err(Error::UnexpectedInput("not {".to_string()))
-        }?;
+        self.compile_brace_block(Box::new(move |this| this.compile_statements()))?;
 
-        self.compile_statements()?;
+        self.writeln(format!("goto {}", end_label).as_ref())?;
 
-        if let Symbol(Symbol::BraceRight) = self.advance()? {
-            self.writeln("<symbol> } </symbol>")
-        } else {
-            Err(Error::UnexpectedInput("not }".to_string()))
-        }?;
+        self.decrement_indent();
+        self.writeln(format!("label {}", else_label).as_ref())?;
+        self.increment_indent();
 
         if let Keyword(Else) = self.peek()? {
             self.current_index += 1;
-            self.writeln("<keyword> else </keyword>")?;
 
-            if let Symbol(Symbol::BraceLeft) = self.advance()? {
-                self.writeln("<symbol> { </symbol>")
-            } else {
-                Err(Error::UnexpectedInput("not {".to_string()))
-            }?;
-
-            self.compile_statements()?;
-
-            if let Symbol(Symbol::BraceRight) = self.advance()? {
-                self.writeln("<symbol> } </symbol>")
-            } else {
-                Err(Error::UnexpectedInput("not }".to_string()))
-            }?;
+            self.compile_brace_block(Box::new(move |this| this.compile_statements()))?;
         }
 
         self.decrement_indent();
-        self.writeln("</ifStatement>")
+        self.writeln(format!("label {}", end_label).as_ref())?;
+        self.increment_indent();
+
+        Ok(())
     }
 
     fn compile_while(&mut self) -> Result<(), Error> {
-        if let Keyword(While) = self.advance()? {
-            self.writeln("<whileStatement>")?;
-            self.increment_indent();
-            self.writeln("<keyword> while </keyword>")
-        } else {
-            Err(Error::UnexpectedInput("bug".to_string()))
-        }?;
+        if &Keyword(While) != self.advance()? {
+            return Err(Error::UnexpectedInput("bug".to_string()));
+        }
 
-        if let Symbol(Symbol::ParenthesLeft) = self.advance()? {
-            self.writeln("<symbol> ( </symbol>")
-        } else {
-            Err(Error::UnexpectedInput("not (".to_string()))
-        }?;
+        let label_number = self.use_label();
+        let begin_label = format!("WHILE_BEGIN{}", label_number);
+        let end_label = format!("WHILE_END{}", label_number);
+
+        self.decrement_indent();
+        self.writeln(format!("label {}", begin_label).as_ref())?;
+        self.increment_indent();
+
+        if &Symbol(Symbol::ParenthesLeft) != self.advance()? {
+            return Err(Error::UnexpectedInput("not (".to_string()));
+        }
 
         self.compile_expression()?;
+        self.writeln("not")?;
+        self.writeln(format!("if-goto {}", end_label).as_str())?;
 
-        if let Symbol(Symbol::ParenthesRight) = self.advance()? {
-            self.writeln("<symbol> ) </symbol>")
-        } else {
-            Err(Error::UnexpectedInput("not )".to_string()))
-        }?;
+        if &Symbol(Symbol::ParenthesRight) != self.advance()? {
+            return Err(Error::UnexpectedInput("not )".to_string()));
+        }
 
-        if let Symbol(Symbol::BraceLeft) = self.advance()? {
-            self.writeln("<symbol> { </symbol>")
-        } else {
-            Err(Error::UnexpectedInput("not {".to_string()))
-        }?;
+        if &Symbol(Symbol::BraceLeft) != self.advance()? {
+            return Err(Error::UnexpectedInput("not {".to_string()));
+        }
 
         self.compile_statements()?;
 
-        if let Symbol(Symbol::BraceRight) = self.advance()? {
-            self.writeln("<symbol> } </symbol>")
-        } else {
-            Err(Error::UnexpectedInput("not }".to_string()))
-        }?;
+        if &Symbol(Symbol::BraceRight) != self.advance()? {
+            return Err(Error::UnexpectedInput("not }".to_string()));
+        }
 
+        self.writeln(format!("goto {}", begin_label).as_str())?;
         self.decrement_indent();
-        self.writeln("</whileStatement>")
+        self.writeln(format!("label {}", end_label).as_ref())?;
+        self.increment_indent();
+
+        Ok(())
     }
 
     fn compile_do(&mut self) -> Result<(), Error> {
@@ -479,28 +424,27 @@ impl<W: Write> Parser<W> {
             return Err(Error::UnexpectedInput("not ;".to_string()));
         }
 
+        // self.writeln("pop temp 0")?;
+
         Ok(())
     }
 
     fn compile_return(&mut self) -> Result<(), Error> {
-        if let Keyword(Return) = self.advance()? {
-            self.writeln("return ")
-        } else {
-            Err(Error::UnexpectedInput("bug".to_string()))
-        }?;
+        if &Keyword(Return) != self.advance()? {
+            return Err(Error::UnexpectedInput("bug".to_string()));
+        }
 
         if let Symbol(Symbol::SemiColon) = self.peek()? {
             self.current_index += 1;
         } else {
             self.compile_expression()?;
-            if let Symbol(Symbol::SemiColon) = self.advance()? {
-                self.writeln("<symbol> ; </symbol>")
-            } else {
-                Err(Error::UnexpectedInput("not ;".to_string()))
-            }?;
+
+            if &Symbol(Symbol::SemiColon) != self.advance()? {
+                return Err(Error::UnexpectedInput("not ;".to_string()));
+            }
         }
 
-        Ok(())
+        self.writeln("return")
     }
 
     fn compile_expression(&mut self) -> Result<(), Error> {
@@ -581,13 +525,16 @@ impl<W: Write> Parser<W> {
                 self.writeln(msg.as_str())
             }
 
-            Keyword(True) => self.writeln("<keyword> true </keyword>"),
+            Keyword(True) => {
+                self.writeln("push constant 1")?;
+                self.writeln("neg")
+            }
 
-            Keyword(False) => self.writeln("<keyword> false </keyword>"),
+            Keyword(False) => self.writeln("push constant 0"),
 
-            Keyword(Null) => self.writeln("<keyword> null </keyword>"),
+            Keyword(Null) => self.writeln("push constant 0"),
 
-            Keyword(This) => self.writeln("<keyword> this </keyword>"),
+            Keyword(This) => self.writeln("push this"),
 
             Identifier(var_name) => {
                 let token = self.peek()?.clone();
@@ -604,8 +551,20 @@ impl<W: Write> Parser<W> {
 
                     _ => {
                         // var_name
-                        let msg = format!("<identifier> {} </identifier>", var_name);
-                        self.writeln(msg.as_str())?;
+                        if let Some(i) = self.symbol_table.index_of(var_name.clone()) {
+                            // TODO: Handle the type
+                            let kind = match self.symbol_table.kind_of(var_name.clone()) {
+                                Some(Kind::Arg) => "argument",
+                                Some(Kind::Var) => "local",
+                                None => return Err(Error::UnexpectedInput("bug".to_string())),
+                                _ => unimplemented!(),
+                            };
+                            let msg = format!("push {} {}", kind, i);
+                            self.writeln(&msg)?;
+                        } else {
+                            let msg = format!("undefined variable: {}", var_name);
+                            return Err(Error::UnexpectedInput(msg));
+                        }
 
                         match self.peek()? {
                             Symbol(Symbol::BracketLeft) => {
@@ -639,13 +598,13 @@ impl<W: Write> Parser<W> {
             }
 
             Symbol(Symbol::Minus) => {
-                self.writeln("<symbol> - </symbol>")?;
-                self.compile_term()
+                self.compile_term()?;
+                self.writeln("neg")
             }
 
             Symbol(Symbol::Not) => {
-                self.writeln("<symbol> ~ </symbol>")?;
-                self.compile_term()
+                self.compile_term()?;
+                self.writeln("not")
             }
 
             _ => Err(Error::UnexpectedInput("not expression".to_string())),
@@ -702,7 +661,7 @@ impl<W: Write> Parser<W> {
                 };
 
                 let count_args = self.compile_expression_list()?;
-                let msg = format!("call {}.{} {}\n", class_name, subroutine_name, count_args);
+                let msg = format!("call {}.{} {}", class_name, subroutine_name, count_args);
                 self.writeln(&msg)
             }
 
@@ -723,8 +682,8 @@ impl<W: Write> Parser<W> {
                     break;
                 }
                 Symbol(Symbol::Comma) => {
-                    self.compile_expression()?;
                     self.current_index += 1;
+                    self.compile_expression()?;
                     count_expressions += 1;
                 }
                 _ => {
@@ -813,6 +772,12 @@ impl<W: Write> Parser<W> {
 
     fn has_more_token(&self) -> bool {
         self.current_index < self.tokens.len()
+    }
+
+    fn use_label(&mut self) -> usize {
+        let l = self.label_counter;
+        self.label_counter += 1;
+        return l;
     }
 }
 
